@@ -1,0 +1,46 @@
+
+# Custom ignores (your project-specific ones)
+agents/temp/
+agents/rough/
+agents/agents_ved.py
+agents/coding/
+agents/.cache/
+evaluation/
+tmp_code_*
+code_generation.py
+code_generation.sh
+
+
+
+# Python cache/compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+*.egg-info/
+build/
+dist/
+
+# IDE settings
+.idea/
+.vscode/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+
