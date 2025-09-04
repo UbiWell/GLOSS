@@ -1,20 +1,13 @@
-# Standard library imports
 import base64
-import json
-import os
-import threading
-import time
-import webbrowser
 
-# Third-party imports
 import streamlit as st
-
-# Local imports
+import time
+import threading
 import sensemaking_process
+import json
 
 
 def start_sense_making(query_input, presentation_instructions):
-    """Start the sensemaking process with the given query and instructions"""
     if st.session_state.status == "Completed":
         reset_state()
         st.session_state.retain_results = False
@@ -29,15 +22,199 @@ def start_sense_making(query_input, presentation_instructions):
         st.session_state.sensemaker_running = True
         st.session_state.status = "Running"
 
+
         threading.Thread(target=st.session_state.sense_maker.make_sense).start()
 
 
 def reset_state():
-    """Reset the session state"""
     for key in st.session_state.keys():
         if key == "sense_maker":
             del st.session_state[key]
 
+
+# UI Layout
+st.set_page_config(page_title="GLOSS: Sensemaking System", page_icon="🔍", layout="wide")
+st.markdown("""
+    <style>
+        .vertical-line {
+            border-left: 3px solid black; /* Bold black line */
+            height: 10vh; /* Set height to 10% of viewport height */
+            position: absolute; /* Ensure it takes up its column */
+            left: 45%; /* Shift towards the left (adjust percentage as needed) */
+            margin-top: -5vh; /* Adjust top margin to bring it closer to the heading */
+            margin-bottom: 5vh; /* Maintain bottom margin */
+        }
+        .col2-container {
+            padding-left: 20px; /* Add padding before col2 */
+        }
+        .column-container {
+            position: relative; /* Parent container for proper alignment */
+            display: flex; /* Ensure columns are aligned properly */
+        }
+    </style>
+""", unsafe_allow_html=True)
+st.title("GLOSS: Sensemaking System 🔍")
+# Layout with padding and vertical line
+col1, col2 = st.columns([3, 1], gap="medium")  # Adjust proportions for layout
+
+# Wrap columns in a container for styling
+st.markdown('<div class="column-container">', unsafe_allow_html=True)
+
+# Column 1 content
+
+
+# st.markdown("""
+#     <style>
+#         .bold-line {
+#             border: none;
+#             border-top: 2px solid black;
+#             margin: 0;
+#             padding: 0;
+#         }
+#         .bold-line:before {
+#             content: '';
+#             display: block;
+#             border-top: 2px solid black;
+#             margin-top: 10px;
+#             margin-bottom: 10px;
+#         }
+#     </style>
+#     <div class="bold-line"></div>
+# """, unsafe_allow_html=True)
+
+# Column 2 content with additional padding
+with col1:
+    st.markdown('<div class="col2-container">', unsafe_allow_html=True)
+    query_input = st.text_input("Enter your query:", placeholder="Type your question here...")
+    presentation_instructions = st.text_input("Enter presentation instructions:",
+                                              placeholder="Type instructions here...")
+    st.markdown('</div>', unsafe_allow_html=True)
+    if st.button("Start Sense-Making", key="start_button", help="Click to initiate the sense-making process."):
+        start_sense_making(query_input, presentation_instructions)
+
+st.markdown('</div>', unsafe_allow_html=True)  # Close the column container
+
+if 'sensemaker_running' not in st.session_state:
+    st.session_state.sensemaker_running = False
+
+if 'retain_results' not in st.session_state:
+    st.session_state.retain_results = False
+
+
+
+if 'status' not in st.session_state:
+    st.session_state.status = "Not started"
+
+# CSS for colored boxes and scrolling
+# Add CSS for light and dark mode compatibility
+st.markdown("""
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .box {
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            color: inherit;  /* Adapts text color to current theme */
+            overflow-y: auto;
+            max-height: 300px;  /* Adjust height as needed */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .current-step { background-color: var(--secondary-background-color); border: 1px solid var(--text-color); }
+     .memory { 
+    background-color: #BBDEFB; 
+    border: 1px solid #90CAF9; 
+    color: black; /* Text color set to black */
+}
+
+.understanding { 
+    background-color: #FFF9C4; 
+    border: 1px solid #FFE082; 
+    color: black; /* Text color set to black */
+}
+
+.information-request { 
+    background-color: #FFCDD2; 
+    border: 1px solid #FFAB91; 
+    color: black; /* Text color set to black */
+}
+
+.action-plan { 
+    background-color: #FDDAC4; 
+    border: 1px solid #FCA191; 
+    color: black; /* Text color set to black */
+}
+
+.function-calls { 
+    background-color: #d8c5ed; 
+    border: 1px solid #FCA191; 
+    color: black; /* Text color set to black */
+}
+
+        .status-container {
+            background-color: var(--secondary-background-color); 
+            border: 1px solid var(--text-color);
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            color: inherit; /* Adapts to text color of current theme */
+        }
+        .status-icon {
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Real-time display containers
+
+with col2:
+    status_container = st.empty()
+    current_step_container = st.empty()
+
+sense_cols = st.columns(5)
+
+with sense_cols[0]:
+    with st.expander("Action Plan", expanded=True):
+        hypothesis_container = st.empty()
+        download_hypothesis_container = st.empty()
+with sense_cols[1]:
+    with st.expander("Information Requests", expanded=True):
+        info_request_container = st.empty()
+        download_info_request_container = st.empty()
+with sense_cols[2]:
+    with st.expander("Memory", expanded=True):
+        memory_container = st.empty()
+        download_memory_container = st.empty()
+with sense_cols[3]:
+    with st.expander("Understanding", expanded=True):
+        understanding_container = st.empty()
+        download_understanding_container = st.empty()
+
+with sense_cols[4]:
+    with st.expander("Function Calls", expanded=True):
+        function_call_container = st.empty()
+        download_function_call_container = st.empty()
+
+
+def open_in_new_window(content, title="Content"):
+    """
+    Creates a downloadable link to open content in a new tab.
+    """
+    st.link_button("Open in new window", "https://docs.streamlit.io/develop/api-reference/widgets/st.link_button")
+
+
+# Real-time update function
+import os
+
+import os
+import webbrowser
+import streamlit as st
+
+
+import os
+import webbrowser
 
 def create_and_link_html(content, title="Page", filename="page.html"):
     """
@@ -134,9 +311,9 @@ def create_and_link_html(content, title="Page", filename="page.html"):
         print(f"Error opening file: {e}")
 
 
+
 def render_button():
-    """Render the download buttons for different components"""
-    with download_action_plan_container:
+    with download_hypothesis_container:
         if st.button("Open in New Tab", key=f"action_plan"):
             if "sense_maker" in st.session_state:
                 create_and_link_html(st.session_state.sense_maker.action_plan, f"Action Plan")
@@ -170,7 +347,6 @@ def render_button():
 
 
 def update_dashboard():
-    """Update the dashboard with current sensemaking state"""
     timestamp = time.time()
     with status_container:
         st.markdown(
@@ -182,7 +358,7 @@ def update_dashboard():
             st.markdown('<div class="box current-step"><p>{}</p></div>'.format(
                 st.session_state.sense_maker.current_step), unsafe_allow_html=True)
 
-    with action_plan_container:
+    with hypothesis_container:
         st.markdown(
             '<div class="box action-plan"><p>{}</p></div>'.format(
                 st.session_state.sense_maker.action_plan),
@@ -200,11 +376,14 @@ def update_dashboard():
             '<div class="box memory"><p>{}</p></div>'.format(st.session_state.sense_maker.memory),
             unsafe_allow_html=True)
 
+
     with understanding_container:
+
         st.markdown(
             '<div class="box understanding"><p>{}</p></div>'.format(
                 st.session_state.sense_maker.understanding),
             unsafe_allow_html=True)
+
 
     with function_call_container:
         function_call_content = "<ul>" + "".join(
@@ -214,147 +393,7 @@ def update_dashboard():
                     unsafe_allow_html=True)
 
 
-# Main UI Configuration
-st.set_page_config(page_title="GLOSS: Sensemaking System", page_icon="🔍", layout="wide")
-
-# CSS Styles
-st.markdown("""
-    <style>
-        .vertical-line {
-            border-left: 3px solid black; /* Bold black line */
-            height: 10vh; /* Set height to 10% of viewport height */
-            position: absolute; /* Ensure it takes up its column */
-            left: 45%; /* Shift towards the left (adjust percentage as needed) */
-            margin-top: -5vh; /* Adjust top margin to bring it closer to the heading */
-            margin-bottom: 5vh; /* Maintain bottom margin */
-        }
-        .col2-container {
-            padding-left: 20px; /* Add padding before col2 */
-        }
-        .column-container {
-            position: relative; /* Parent container for proper alignment */
-            display: flex; /* Ensure columns are aligned properly */
-        }
-        body {
-            font-family: Arial, sans-serif;
-        }
-        .box {
-            border-radius: 5px;
-            padding: 15px;
-            margin: 10px 0;
-            color: inherit;  /* Adapts text color to current theme */
-            overflow-y: auto;
-            max-height: 300px;  /* Adjust height as needed */
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .action-plan {
-            background-color: #e8f5e8;  /* Light green */
-            border-left: 4px solid #4caf50;
-        }
-        .information-request {
-            background-color: #fff3e0;  /* Light orange */
-            border-left: 4px solid #ff9800;
-        }
-        .memory {
-            background-color: #e3f2fd;  /* Light blue */
-            border-left: 4px solid #2196f3;
-        }
-        .understanding {
-            background-color: #f3e5f5;  /* Light purple */
-            border-left: 4px solid #9c27b0;
-        }
-        .function-calls {
-            background-color: #fff8e1;  /* Light yellow */
-            border-left: 4px solid #ffc107;
-        }
-        .current-step {
-            background-color: #fce4ec;  /* Light pink */
-            border-left: 4px solid #e91e63;
-        }
-        .status-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: bold;
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #f0f0f0;
-        }
-        .status-icon {
-            font-size: 1.2em;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# Page Title
-st.title("GLOSS: Sensemaking System 🔍")
-
-# Layout with padding and vertical line
-col1, col2 = st.columns([3, 1], gap="medium")  # Adjust proportions for layout
-
-# Wrap columns in a container for styling
-st.markdown('<div class="column-container">', unsafe_allow_html=True)
-
-# Column 1 content with additional padding
-with col1:
-    st.markdown('<div class="col2-container">', unsafe_allow_html=True)
-    query_input = st.text_input("Enter your query:", placeholder="Type your question here...")
-    presentation_instructions = st.text_input("Enter presentation instructions:",
-                                              placeholder="Type instructions here...")
-    st.markdown('</div>', unsafe_allow_html=True)
-    if st.button("Start Sense-Making", key="start_button", help="Click to initiate the sense-making process."):
-        start_sense_making(query_input, presentation_instructions)
-
-st.markdown('</div>', unsafe_allow_html=True)  # Close the column container
-
-# Initialize session state variables
-if 'sensemaker_running' not in st.session_state:
-    st.session_state.sensemaker_running = False
-
-if 'retain_results' not in st.session_state:
-    st.session_state.retain_results = False
-
-if 'status' not in st.session_state:
-    st.session_state.status = "Not started"
-
-# Create containers for different sections
-status_container = st.container()
-current_step_container = st.container()
-
-# Create columns for the dashboard
-sense_cols = st.columns(2)
-
-with sense_cols[0]:
-    with st.expander("Action Plan", expanded=True):
-        action_plan_container = st.empty()
-        download_action_plan_container = st.empty()
-
-with sense_cols[1]:
-    with st.expander("Information Requests", expanded=True):
-        info_request_container = st.empty()
-        download_info_request_container = st.empty()
-
-# Create more columns for additional sections
-memory_cols = st.columns(2)
-
-with memory_cols[0]:
-    with st.expander("Memory", expanded=True):
-        memory_container = st.empty()
-        download_memory_container = st.empty()
-
-with memory_cols[1]:
-    with st.expander("Understanding", expanded=True):
-        understanding_container = st.empty()
-        download_understanding_container = st.empty()
-
-# Function calls section
-with st.expander("Function Calls", expanded=True):
-    function_call_container = st.empty()
-    download_function_call_container = st.empty()
-
-# Render buttons and update dashboard
 render_button()
-
 # Keep the UI updating periodically while the process runs
 if st.session_state.sensemaker_running:
     while st.session_state.sensemaker_running and st.session_state.sense_maker.current_step != "FINISH":
@@ -376,6 +415,7 @@ elif st.session_state.retain_results:
     with st.expander("Final Answer", expanded=True):
         st.write(st.session_state.sense_maker.answer)
     st.success("Completed SenseMaking")
+
 
 # Footer with additional styling
 st.markdown("<hr>", unsafe_allow_html=True)
