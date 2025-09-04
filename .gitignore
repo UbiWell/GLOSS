@@ -1,14 +1,13 @@
 
 # Custom ignores (your project-specific ones)
-agents/temp/
-agents/rough/
-agents/agents_ved.py
+
 agents/coding/
 agents/.cache/
-evaluation/
+
 tmp_code_*
 code_generation.py
 code_generation.sh
+stress-detection-algorithm-code-python
 
 
 

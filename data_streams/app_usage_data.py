@@ -37,7 +37,8 @@ app_map = {
     "GM": "Gmail",
     "YT": "YouTube",
     "PS": "Photoshop",
-    "RB": "Red Book"
+    "RB": "Red Book",
+    "WHT": "Whatsapp"
 }
 
 functions = {

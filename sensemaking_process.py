@@ -24,13 +24,13 @@ def print_welcome():
     print("\n" + "="*80)
     print("🤖 WELCOME TO SENSEMAKING PROCESS USING GLOSS 🤖")
     print("="*80)
-    
+
     # Get all available databases
     databases = get_all_databases()
-    
+
     print(f"\n📊 SUPPORTED DATABASES ({len(databases)} total):")
     print("-" * 60)
-    
+
     # Group databases by device type
     device_groups = {}
     for name, db in databases.items():
@@ -38,12 +38,12 @@ def print_welcome():
         if device not in device_groups:
             device_groups[device] = []
         device_groups[device].append((name, db.info))
-    
+
     for device, db_list in device_groups.items():
         print(f"\n📱 {device.upper()} DATABASES:")
         for name, info in db_list:
             print(f"   • {name}: {info[:60]}{'...' if len(info) > 60 else ''}")
-    
+
     print("\n" + "="*80 + "\n")
 
 
@@ -51,7 +51,7 @@ def print_step(step_name, content="", verbose=True):
     """Print a step with pretty formatting"""
     if not verbose:
         return
-    
+
     print(f"\n{'🔹' * 20} {step_name} {'🔹' * 20}")
     if content:
         print(content)
@@ -62,7 +62,7 @@ def print_memory(memory, verbose=True):
     """Print memory with pretty formatting"""
     if not verbose or not memory.strip():
         return
-    
+
     print("MEMORY:")
     print("-" * 60)
     print(memory.strip())
@@ -101,7 +101,7 @@ class SenseMaker:
     def make_sense(self, verbose=True):
         # Print welcome message and supported databases
         print_welcome()
-        
+
         self.current_step = "START"
         self.step_history.append(self.current_step)
         time.sleep(1)
@@ -147,7 +147,7 @@ class SenseMaker:
                 if verbose:
                     print(f"❌ Error in response: {str(e)}")
                 continue
-            
+
             if verbose:
                 print(f"🔄 Returned state: {state}")
 
@@ -158,7 +158,7 @@ class SenseMaker:
                 state = "INF"
                 if verbose:
                     print_step("INFORMATION SEEKING", verbose=verbose)
-                
+
                 response = self.invoke_with_retry(self.information_seeking_agent, 'invoke', {
                     'understanding': self.understanding,
                     'user_query': self.user_query,
@@ -200,12 +200,12 @@ class SenseMaker:
                         for res in results:
                             if ('func' in res):
                                 self.function_calls.append(res['func'])
-                        
+
                         if verbose:
                             print_step("LOCAL SENSEMAKING", verbose=verbose)
                             print("Creating natural language interpretation of code results and updating memory...")
 
-                        
+
                         self.current_step = "LOCAL SENSEMAKING"
                         self.step_history.append(self.current_step)
 
@@ -252,24 +252,24 @@ class SenseMaker:
                 if verbose:
                     print("\n" + "🎯" * 20 + " END OF SENSEMAKING " + "🎯" * 20)
                     print_understanding(self.understanding, verbose)
-                
+
                 self.current_step = "PRESENTATION"
                 self.step_history.append(self.current_step)
-                
+
                 if verbose:
                     print_step("PRESENTATION", verbose=verbose)
-                
+
                 answer = self.invoke_with_retry(self.presentation_agent, 'invoke', {
                     'user_query': self.user_query,
                     'understanding': self.understanding,
                     'instructions': self.presentation_instructions
                 })
                 self.answer = answer["response"]
-                
+
                 print("\n" + "🎉" * 20 + " FINAL ANSWER " + "🎉" * 20)
                 print(self.answer)
                 print("🎉" * 50)
-                
+
                 self.current_step = "FINISH"
                 self.step_history.append(self.current_step)
                 break
@@ -298,8 +298,7 @@ if __name__ == "__main__":
     clear and concise
     '''
     query = '''
-    on 11th june 23, did u010 walked more than 5k steps?'''
+    on aug 28 2025, for test004 what was most used app by duration?'''
     SenseMaker(
         query,
         presentation_instructions_).make_sense(verbose=VERBOSE)
-    a = ""
