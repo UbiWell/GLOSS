@@ -83,53 +83,12 @@ class GenericCodingFunctions:
         """
         function_imports = ""
         for database in self.databases:
-            if database == "activity database":
-                function_imports += (
-                        "\nUse following import for activity functions (ACT)" + "\n" + "from from data_streams.activity_data import function_name")
-
-            elif database == "location database":
-                function_imports += (
-                        "\nUse following import for location functions (LOC)" + "\n" + "from from data_streams.location_data import function_name")
-
-            elif database == "phone steps database":
-                function_imports += (
-                        "\nUse following import for phone steps functions (PHONE)" + "\n" + "from from data_streams.phone_steps_data import function_name")
-
-            elif database == "garmin steps database":
-                function_imports += (
-                        "\nUse following import for garmin steps functions (GARMINSTEP)" + "\n" + "from from data_streams.garmin_steps_data import function_name")
-
-            elif database == "garmin hr database":
-                function_imports += (
-                        "\nUse following import for garmin hr functions (GARMINHR)" + "\n" + "from from data_streams.garmin_hr_data import function_name")
-
-            elif database == "lock unlock database":
-                function_imports += (
-                        "\nUse following import for lock unlock functions (UL)" + "\n" + "from from data_streams.lock_unlock_data import function_name")
-
-            elif database == "wifi database":
-                function_imports += (
-                        "\nUse following import for wifi functions (WIFI)" + "\n" + "from from data_streams.wifi_data import function_name")
-
-            elif database == "app usage database":
-                function_imports += (
-                        "\nUse following import for app usage functions (APP)" + "\n" + "from from data_streams.app_usage_data import function_name")
-
-            elif database == "phone battery database":
-                function_imports += (
-                        "\nUse following import for phone battery functions (BATTERY)" + "\n" + "from from data_streams.battery_data import function_name")
-
-            elif database == "call log database":
-                function_imports += (
-                        "\nUse following import for call log functions (CALL)" + "\n" + "from from data_streams.call_log import function_name")
-
-            elif database == "garmin stress database":
-                function_imports += (
-                        "\nUse following import for garmin stress functions (STRESS)" + "\n" + "from from models.stress_prediction_model import function_name")
-
-            elif database == "brightness database":
-                function_imports += (
-                        "\nUse following import for brightness functions (BRIGHTNESS)" + "\n" + "from from data_streams.brightness_data import function_name")
+            # Get complete import statement from database registry
+            from agents.database_registry import get_import_path_for_database
+            import_statement = get_import_path_for_database(database)
+            
+            if import_statement:
+                function_imports += import_statement
 
         results = run_coding_agent(user_query=user_query, database=self.databases, functions=self.functions,
                                    include_statements=include_statements, function_imports=function_imports)

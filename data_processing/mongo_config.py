@@ -3,6 +3,6 @@ MongoDB Configuration File
 """
 host = 'localhost'
 port = '27017'
-database = 'your collection name'
+database = 'genai'
 username = None
 password = None

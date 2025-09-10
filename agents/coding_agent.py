@@ -35,7 +35,7 @@ async def coding_agent(user_query, system_prompt) -> TaskResult:
     # Create the token provider
     client = get_llm_chat_openai()
 
-    async with DockerCommandLineCodeExecutor(work_dir="/Users/akshat/Desktop/Akshat/research/repos/llm-sensemaking/",
+    async with DockerCommandLineCodeExecutor(work_dir="/Users/akshat/Desktop/Akshat/research/GenAI_and_PI/llm-sensemaking",
                                              image=DOCKER_NAME, auto_remove=False,
                                              stop_container=False) as code_executor:
         code_executor_agent = CodeExecutorAgent("code_executor", code_executor=code_executor)

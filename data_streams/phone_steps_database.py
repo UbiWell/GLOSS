@@ -47,5 +47,5 @@ def register_database(registry):
         additional_instructions=database_info["additional_instructions"],
         functions=functions,  # Function metadata/definitions for LLMs
         function_refs=function_refs,  # Actual function references
-        module_path="data_streams.phone_steps_database"
+        import_path="\nUse following import for phone steps database functions (PHONE)\nfrom data_streams.phone_steps_data import function_name"
     )

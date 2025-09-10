@@ -53,5 +53,5 @@ def register_database(registry):
         additional_instructions=database_info["additional_instructions"],
         functions=functions,  # Function metadata/definitions for LLMs
         function_refs=function_refs,  # Actual function references
-        module_path="data_streams.activity_database"
+        import_path="\nUse following import for activity database functions (ACT)\nfrom data_streams.activity_data import function_name"
     )

@@ -381,10 +381,10 @@ def plot_app_durations(data):
 
 
 if __name__ == "__main__":
-    start_timestamp = "2024-07-28 00:00:47"
-    end_timestamp = "2024-07-28 23:59:47"
+    start_timestamp = "2025-08-28 00:00:47"
+    end_timestamp = "2025-08-28 23:59:47"
 
-    app_usage_blocks = get_app_usage_blocks('test008', start_timestamp, end_timestamp)
+    app_usage_blocks = get_app_usage_blocks('test004', start_timestamp, end_timestamp)
 
 
     for l in (app_usage_blocks):

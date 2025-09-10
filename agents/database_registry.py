@@ -18,7 +18,7 @@ class DatabaseInfo:
     additional_instructions: str = ""
     functions: Dict[str, Dict[str, Any]] = None  # Function metadata/definitions for LLMs
     function_refs: Dict[str, Callable] = None     # Actual function references
-    module_path: str = ""
+    import_path: str = ""  # Complete formatted import statement
 
 class DatabaseRegistry:
     """Centralized registry for all databases and their functions"""
@@ -80,7 +80,7 @@ class DatabaseRegistry:
                 additional_instructions=db_info.get('additional_instructions', ''),
                 functions=module.functions,  # Function metadata/definitions
                 function_refs=getattr(module, 'function_refs', {}),  # Actual function references
-                module_path=f'{directory_name}.{module_name}'
+                import_path=db_info.get('import_path', '')
             )
     
     def _auto_register_model_as_database(self, module, module_name: str, directory_name: str = 'models'):
@@ -91,7 +91,8 @@ class DatabaseRegistry:
                 'name': f"{module_name} database",
                 'info': f"Contains functions from {module_name} model",
                 'device': 'Model',
-                'additional_instructions': f"This is a model-based database providing {module_name} functionality."
+                'additional_instructions': f"This is a model-based database providing {module_name} functionality.",
+                'import_path': f"\nUse following import for {module_name} database functions ({module_name.upper()})\nfrom {directory_name}.{module_name} import function_name"
             }
             
             self.register_database(
@@ -101,14 +102,15 @@ class DatabaseRegistry:
                 additional_instructions=db_info['additional_instructions'],
                 functions=module.functions,  # Function metadata/definitions
                 function_refs=getattr(module, 'function_refs', {}),  # Actual function references
-                module_path=f'{directory_name}.{module_name}'
+                import_path=db_info['import_path']
             )
+    
     
     def register_database(self, name: str, info: str, device: str, 
                          additional_instructions: str = "", 
                          functions: Dict[str, Dict[str, Any]] = None,
                          function_refs: Dict[str, Callable] = None,
-                         module_path: str = ""):
+                         import_path: str = ""):
         """Register a new database"""
         self.databases[name] = DatabaseInfo(
             name=name,
@@ -117,7 +119,7 @@ class DatabaseRegistry:
             additional_instructions=additional_instructions,
             functions=functions or {},
             function_refs=function_refs or {},
-            module_path=module_path
+            import_path=import_path
         )
     
     def get_database(self, name: str) -> DatabaseInfo:
@@ -141,6 +143,11 @@ class DatabaseRegistry:
         """Get actual function references for a specific database"""
         db = self.get_database(database_name)
         return db.function_refs if db else {}
+    
+    def get_import_path_for_database(self, database_name: str) -> str:
+        """Get import path for a specific database"""
+        db = self.get_database(database_name)
+        return db.import_path if db else ""
     
     def get_all_functions(self) -> Dict[str, Dict[str, Any]]:
         """Get all function metadata/definitions from all databases"""
@@ -198,3 +205,7 @@ def get_all_functions() -> Dict[str, Dict[str, Any]]:
 def get_all_function_refs() -> Dict[str, Callable]:
     """Get all actual function references from all databases"""
     return registry.get_all_function_refs()
+
+def get_import_path_for_database(database_name: str) -> str:
+    """Get import path for a specific database"""
+    return registry.get_import_path_for_database(database_name)

@@ -47,5 +47,5 @@ def register_database(registry):
         additional_instructions=database_info["additional_instructions"],
         functions=functions,  # Function metadata/definitions for LLMs
         function_refs=function_refs,  # Actual function references
-        module_path="data_streams.call_log_database"
+        import_path="\nUse following import for call log database functions (CALL)\nfrom data_streams.call_log import function_name"
     )

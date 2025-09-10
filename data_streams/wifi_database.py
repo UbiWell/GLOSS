@@ -51,5 +51,5 @@ def register_database(registry):
         additional_instructions=database_info["additional_instructions"],
         functions=functions,  # Function metadata/definitions for LLMs
         function_refs=function_refs,  # Actual function references
-        module_path="data_streams.wifi_database"
+        import_path="\nUse following import for wifi database functions (WIFI)\nfrom data_streams.wifi_data import function_name"
     )

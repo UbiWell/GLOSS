@@ -57,5 +57,5 @@ def register_database(registry):
         additional_instructions=database_info["additional_instructions"],
         functions=functions,  # Function metadata/definitions for LLMs
         function_refs=function_refs,  # Actual function references
-        module_path="data_streams.location_database"
+        import_path="\nUse following import for location database functions (LOC)\nfrom data_streams.location_data import function_name"
     )

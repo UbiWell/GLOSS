@@ -107,7 +107,7 @@
 #         additional_instructions=database_info["additional_instructions"],
 #         functions=functions,  # Function metadata/definitions for LLMs
 #         function_refs=function_refs,  # Actual function references
-#         module_path="data_streams.my_new_database"
+#         import_path="\nUse following import for my new database functions (MYNEW)\nfrom data_streams.my_new_data import function_name"
 #     )
 #
 # # Example usage in your code:
