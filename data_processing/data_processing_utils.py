@@ -4,9 +4,11 @@ Utility functions for data processing with MongoDB.
 from pymongo import MongoClient
 from datetime import datetime
 from data_processing import db_config
+from agents.config import USE_CSV
 import pymongo
 from typing import List, Dict, Any
 import os
+
 
 def fetch_documents_between_timestamps(uid: str, start_timestamp: int, end_timestamp: int,
                                        collection_name: str) -> List[Dict[str, Any]]:
