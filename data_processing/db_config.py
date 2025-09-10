@@ -19,12 +19,13 @@ class DbConfig:
         self.db_port = int(definitions.port)
         self.database = definitions.database
         self.db_user = definitions.username
-        self.db_pwd = urllib.parse.quote(definitions.password)
+        if definitions.password:
+            self.db_pwd = urllib.parse.quote(definitions.password)
         if self.db_user and self.db_pwd:
             self.db_uri = "mongodb://{}:{}@{}:{}/{}".format(self.db_user, self.db_pwd, self.db_host, self.db_port,
                                           self.database)
         else:
-            self.db_uri = os.getenv("MONGO_URI", f"mongodb://{self.db_host}:{self.db_port}/{self.database}")
+            self.db_uri = f"mongodb://{self.db_host}:{self.db_port}/{self.database}"
 
     def getDb(self):
         client = MongoClient(self.db_uri)
