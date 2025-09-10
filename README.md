@@ -81,7 +81,6 @@ source ~/.bashrc   # or ~/.zshrc
 * **Open the Dockerfile in the repository**
 * **Find the environment variables section**
 * **Replace the placeholder values with your actual API keys (OpenAI, Claude, etc.)**
-* **In agents/coding_agent.py Line 38 change work_dir to path to your repository**
 
 ### 6. Build the Docker Container
 ```bash
@@ -96,6 +95,8 @@ The first author provided one day (08/28/2025) of their data as sample data, exc
 So after setting up GLOSS, users can query the data.
 
 ### 8. Customize and Run
+**In agents/coding_agent.py Line 38 change work_dir to path to your repository**
+
 ```bash
 # Edit the main script to set your research question
 vi sensemaking_process.py  # or use your preferred editor
