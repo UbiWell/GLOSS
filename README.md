@@ -78,9 +78,10 @@ source ~/.bashrc   # or ~/.zshrc
 ## Docker Setup
 
 ### 5. Add Your API Keys
-* **Open the Dockerfile in the llm-sensemaking folder**
+* **Open the Dockerfile in the repository**
 * **Find the environment variables section**
 * **Replace the placeholder values with your actual API keys (OpenAI, Claude, etc.)**
+* **In agents/coding_agent.py Line 38 change work_dir to path to your repository**
 
 ### 6. Build the Docker Container
 ```bash
