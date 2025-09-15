@@ -12,6 +12,7 @@ from data_streams.constants import IOS_WIFI, time_zone_dict
 import agents.generic_summarizer
 from agents.coding_agent import run_coding_agent
 import pytz
+import pandas as pd
 
 functions = {
     "WIFI0": {
@@ -112,13 +113,18 @@ def process_wifi_records(uid, wifi_records):
             d = {}
             time = datetime.fromtimestamp(r['timestamp'], pytz.utc).astimezone(timezone)
             d['timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S')
-            d['wifi_name'] = r['ssid']
+            if pd.isna(r['ssid']):
+                d['wifi_name'] = ''
+            else:
+                d['wifi_name'] = r['ssid']
             records.append(d)
     return records
 
 
 def get_wifi_blocks(uid, start_time, end_time):
     wifi_records = get_wifi_records(uid, start_time, end_time)
+    if(wifi_records == []):
+        return []
 
     first_flag = True
     wifi_blocks = []
