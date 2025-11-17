@@ -96,6 +96,7 @@ So after setting up GLOSS, users can query the data.
 
 ### 8. Customize and Run
 **In agents/coding_agent.py Line 38 change work_dir to path to your repository**
+https://github.com/UbiWell/GLOSS/blob/main/agents/coding_agent.py#L39
 
 ```bash
 # Edit the main script to set your research question
