@@ -45,8 +45,10 @@ Working dir/GLOSS/stress-detection-algorithm-code-python
 # Go into the GLOSS repository if it's not your current directory
 cd GLOSS
 
-# Create a new Python environment (The default name is gloss-sensemaking)
-conda env create -f environment.yml (OPTIONAL: -n preferred-env-name)
+# Create a new Python environment (The default name is gloss-sensemaking). Use the respective .yml file for Mac or Linux installations
+conda env create -f environment_mac.yml (OPTIONAL: -n preferred-env-name)
+or
+conda env create -f environment_linux.yml (OPTIONAL: -n preferred-env-name)
 
 # Activate your new environment
 conda activate gloss-sensemaking (or preferred-env-name)
