@@ -85,6 +85,7 @@ source ~/.bashrc   # or ~/.zshrc
 * **Replace the placeholder values with your actual API keys (OpenAI, Claude, etc.)**
 
 ### 6. Build the Docker Container
+If you are using Mac, change L14 in Dockerfile to use environment_mac.yml
 ```bash
 # From the GLOSS dir, build the Docker image  (this may take a few minutes)
 docker build -f Dockerfile -t gloss-sensemaking-code . # (use the name set up in config)
@@ -93,7 +94,7 @@ docker build -f Dockerfile -t gloss-sensemaking-code . # (use the name set up in
 
 ## Running GLOSS
 ### 7. Sample Data
-The first author provided one day (08/28/2025) of their data as sample data, except location database in CSV Format. 
+The first author provided one day (08/28/2025) of their data as sample data, except the location database in CSV Format. 
 So after setting up GLOSS, users can query the data.
 
 ### 8. Customize and Run
