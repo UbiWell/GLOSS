@@ -52,7 +52,7 @@ class InformationSeekingAgent:
     
     if you are asking for data for more than one day ask aggregated data rather than just raw data.
 
-    Never ask for more than three databases in a single request.
+    Use all the databases needed to answer the query
     
     Always mention user_id in your request. You can get user_id from user_query
 
