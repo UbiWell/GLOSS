@@ -101,7 +101,7 @@ def process_hr_records(hr_records):
             rec = {}
             uid_timezone = time_zone_dict.get(record['uid'], 'est')  # Get UID-specific timezone or default to EST
             timezone = pytz.timezone("America/New_York") if uid_timezone == "est" else pytz.utc
-            if record['status'] == "locked":
+            if record['status'] == "locked" or record['status'] == "LOCKED":
                 time = datetime.fromtimestamp(record['timestamp'], pytz.utc).astimezone(timezone)
                 rec['timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S')
                 rec['heart_rate'] = record['heart_rate']
