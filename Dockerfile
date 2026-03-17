@@ -12,7 +12,7 @@ ENV RUNNING_IN_DOCKER=true
 
 # Copy the environment file and install script to the Docker image
 COPY environment_linux.yml .
-
+RUN chmod +x environment_linux.yml
 RUN conda env create -f environment_linux.yml   
 # # Ensure the install script has execute permissions
 # RUN chmod +x install_packages.sh
