@@ -22,7 +22,7 @@ git clone https://github.com/UbiWell/GLOSS.git
 # or using SSH:
 # git clone git@github.com:UbiWell/GLOSS.git
 ```
-
+If you want to add stress detection model:
 Clone the stress detection algorithm inside the GLOSS repo. GLOSS uses stress detection models by  📚[Varun et al](https://pmc.ncbi.nlm.nih.gov/articles/PMC9523764/) to detect stress using IBI data
 
 ```bash
@@ -34,6 +34,11 @@ git clone https://github.com/UbiWell/stress-detection-algorithm-code-python.git
 ```
 Your folder structure should now look like:
 Working dir/GLOSS/stress-detection-algorithm-code-python
+Install the package:
+```bash
+cd stress-detection-algorithm-code-python
+pip install -e .
+```
 
 ***What this does:*** Downloads two code repositories needed for GLOSS to work properly.
 
