@@ -86,8 +86,8 @@ class GenericDatabaseManager:
         Output Format: {function ID1: {"name": function name, "params" : {param1: value1, param2: value2}},
                        function ID2: {"name": function name, "params" :{param1: value1, param2: value2}}}
                        
-        Example: {"CODING1": {"name": "get_results_through_data_computation", "params": {"user_id": 1234, "start_time": "2024-07-09 00:00:00", "end_time": "2024-07-09 23:59:59"}}}}
-
+        Example: {"CODING1": {"name": "get_results_through_data_computation", "params": {"user_query": "test004 app usage on 19th september 2025"}}}}
+        
         Instructions:
         1) Just return the dict {} of function calls with input params in the required order. do not return anything else in the output including ```json or ```python.
         2) return {"NOT POSSIBLE" : reason} if the question cannot be answered with the existing functions or you have already called all the functions that could have answered the query.
