@@ -64,6 +64,7 @@ conda activate gloss-sensemaking (or preferred-env-name)
 Go to `agents/config.py` and set up config variables. By default, GLOSS uses GPT-4o:
 
 ```bash
+USE_LOCAL_MODEL = True #(True to run entirely on a local Ollama model, no OpenAI key needed)
 USE_AZURE = False #(True if using Azure deployment)
 USE_GPT5 = False #(True if using GPT-5)
 ONLY_CODE_FUNCTIONS = True #(True if all runs use code generation)
@@ -71,6 +72,9 @@ VERBOSE = True #(True if need more verbosity when running sensemaking_process.py
 USE_CSV = True #(True if using CSV as data, keep it true as demo uses csv data)
 DOCKER_NAME = "gloss-sensemaking-code" # (name of Docker to run LLM-generated code)
 ```
+
+`USE_LOCAL_MODEL` takes priority over `USE_AZURE` and `USE_GPT5`. Set it to
+`False` to fall back to the OpenAI/Azure behaviour described below.
 
 #### Set ENV variables:
 OPENAI_API_KEY or AZURE_OPENAI_API_ENDPOINT and AZURE_OPENAI_API_KEY based on whether you are calling OpenAI APIs directly or through Azure deployment.
@@ -82,19 +86,79 @@ Save and reload your shell:
 
 source ~/.bashrc   # or ~/.zshrc
 ```
+
+### 4b. Running entirely on a local model (no OpenAI key)
+
+With `USE_LOCAL_MODEL = True`, every agent — including the code-generating
+coding agent — talks to an Ollama model on the Khoury GPU cluster instead of
+OpenAI. The only credential needed is the cluster gateway key:
+
+```bash
+export GATEWAY_API_KEY="your_gateway_key_here"
+```
+
+You must be on the Northeastern VPN (or on campus) to reach the gateway.
+Everything else is tunable in `agents/config.py`, and each setting can also be
+overridden by an environment variable of the same name:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `LOCAL_MODEL_NAME` | `gemma4:31b` | Must be a model the gateway permits — see below |
+| `LOCAL_MODEL_BASE_URL` | `https://compute-gateway.europa.khoury.northeastern.edu` | A worker (e.g. `http://129.10.112.25:11434`) works from on-campus and needs no key |
+| `LOCAL_MODEL_THINK` | `False` | Thinking models emit reasoning before their answer; off is faster and keeps JSON replies clean |
+| `LOCAL_MODEL_NUM_PREDICT` | `-1` (uncapped) | Keep generous: reasoning tokens count against this budget |
+| `LOCAL_MODEL_TEMPERATURE` | `0` | |
+| `LOCAL_MODEL_TIMEOUT` | `600` | Seconds; large models are slow to first token |
+
+Check which models the cluster will actually serve before running GLOSS — the
+gateway keeps an allowlist and returns 403 for anything else:
+
+```bash
+curl -H "Authorization: Bearer $GATEWAY_API_KEY" \
+  https://compute-gateway.europa.khoury.northeastern.edu/api/tags
+```
+
+Verify the setup end to end with:
+
+```bash
+python -m agents.local_model
+```
+
+***Known limitation:*** the RAG agent (`agents/rag_based_agent.py`) needs an
+embedding model, and the cluster's Ollama workers run without `--embeddings`.
+That agent still requires `OPENAI_API_KEY`; it sits outside the main
+sensemaking flow, which runs fully local.
+
 ## Docker Setup
 
 ### 5. Add Your API Keys
-* **Open the Dockerfile in the repository**
-* **Find the environment variables section**
-* **Replace the placeholder values with your actual API keys (OpenAI, Claude, etc.)**
+
+Credentials are passed as **build args** rather than edited into the Dockerfile,
+so nothing secret gets committed. They have to be baked into the image because
+autogen 0.4.0.dev2's `DockerCommandLineCodeExecutor` cannot inject environment
+variables at run time, and the generated code imports the summarizer agents,
+which construct an LLM client on import.
+
+Treat the built image as holding the credential — `docker history` and
+`docker inspect` will show it.
 
 ### 6. Build the Docker Container
-If you are using Mac, change L14 in Dockerfile to use environment_mac.yml
+
+Keep using `environment_linux.yml`: the image is Linux whatever your host is.
+On Apple Silicon, add `--platform linux/amd64`, because that file pins
+linux-64 package builds that will not solve on arm64.
+
 ```bash
 # From the GLOSS dir, build the Docker image  (this may take a few minutes)
-docker build -f Dockerfile -t gloss-sensemaking-code . # (use the name set up in config)
+docker build --platform linux/amd64 \
+  --build-arg GATEWAY_API_KEY="$GATEWAY_API_KEY" \
+  -f Dockerfile -t gloss-sensemaking-code . # (use the name set up in config)
 ```
+
+Swap `--build-arg GATEWAY_API_KEY=...` for `--build-arg OPENAI_API_KEY=...`
+when running against OpenAI instead. `LOCAL_MODEL_NAME` and
+`LOCAL_MODEL_BASE_URL` are build args too, defaulting to the same values as
+`agents/config.py`.
 ***What this does:*** Creates a containerized environment that packages everything GLOSS needs to run consistently.
 
 ## Running GLOSS
@@ -103,8 +167,8 @@ The first author provided one day (08/28/2025) of their data as sample data, exc
 So after setting up GLOSS, users can query the data.
 
 ### 8. Customize and Run
-**In agents/coding_agent.py Line 38 change work_dir to path to your repository**
-https://github.com/UbiWell/GLOSS/blob/main/agents/coding_agent.py#L39
+`work_dir` for the code-executor container is now resolved from the repo
+location automatically; set `GLOSS_REPO_ROOT` only if the repo lives elsewhere.
 
 ```bash
 # Edit the main script to set your research question

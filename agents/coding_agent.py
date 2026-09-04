@@ -22,6 +22,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from agents.agent_utils import generate_code_generation_prompt
 from agents.config import DOCKER_NAME
 
+# Repo root, resolved from this file so it needs no per-machine editing.
+# Override with GLOSS_REPO_ROOT if the repo is mounted elsewhere.
+REPO_ROOT = os.getenv(
+    "GLOSS_REPO_ROOT",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
+)
+
 logger = logging.getLogger(EVENT_LOGGER_NAME)
 logger.addHandler(ConsoleLogHandler())
 logger.setLevel(logging.INFO)
@@ -29,14 +36,11 @@ logger.setLevel(logging.INFO)
 
 
 async def coding_agent(user_query, system_prompt) -> TaskResult:
-    from autogen_ext.models import AzureOpenAIChatCompletionClient
-    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-
-    # Create the token provider
+    # Local Ollama client or OpenAI client, depending on USE_LOCAL_MODEL
     client = get_llm_chat_openai()
 
-    # Add path to your repo here
-    async with DockerCommandLineCodeExecutor(work_dir="path/to/repo/here",
+    # Path to this repo, mounted into the container that runs generated code
+    async with DockerCommandLineCodeExecutor(work_dir=REPO_ROOT,
                                              image=DOCKER_NAME, auto_remove=False,
                                              stop_container=False) as code_executor:
         code_executor_agent = CodeExecutorAgent("code_executor", code_executor=code_executor)

@@ -21,12 +21,18 @@ import data_streams.wifi_data as wifi_data
 import data_streams.app_usage_data as app_usage_data
 import data_streams.battery_data as battery_data
 import data_streams.call_log as call_log
-import models.stress_prediction_model as stress
+# The stress detection model needs the ubiwell_stress_detection package, which
+# lives in a separate repo (UbiWell/stress-detection-algorithm-code-python) and
+# is optional. Without it GLOSS runs normally, minus the stress functions.
+try:
+    import models.stress_prediction_model as stress
+except ImportError:
+    stress = None
 
 all_functions = {**activity_data.functions, **location_data.functions, **phone_steps_data.functions,
                  **heart_rate_data.functions, **lock_unlock_data.functions, **garmin_steps_data.functions,
                  **wifi_data.functions, **app_usage_data.functions, **battery_data.functions, **call_log.functions,
-                 **stress.functions}
+                 **(stress.functions if stress is not None else {})}
 
 
 def run_function_from_dict(function_name, params, type):
@@ -53,6 +59,9 @@ def run_function_from_dict(function_name, params, type):
         if type == 'call_log':
             func = getattr(call_log, function_name)
         if type == 'stress':
+            if stress is None:
+                return ("Stress detection is unavailable: the "
+                        "ubiwell_stress_detection package is not installed.")
             func = getattr(stress, function_name)
 
         output = func(**params)

@@ -12,7 +12,7 @@ from langchain import hub
 from langchain_chroma import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
-from langchain_openai import OpenAIEmbeddings
+from agents.llm_factory import get_embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from agents.agent_utils import invoke_with_retry
@@ -177,7 +177,7 @@ class RAGBasedAgent:
         splits = text_splitter.split_documents([docs])
         vectorstore = Chroma("GLOSS_rag")
         vectorstore._client.delete_collection("GLOSS_rag")
-        vectorstore = Chroma.from_documents(collection_name="GLOSS_rag", documents=splits, embedding=OpenAIEmbeddings())
+        vectorstore = Chroma.from_documents(collection_name="GLOSS_rag", documents=splits, embedding=get_embeddings())
         retriever = vectorstore.as_retriever()
         # prompt = hub.pull("rlm/rag-prompt")
         prompt_text = """
