@@ -122,6 +122,12 @@ def adapt_call_log(records):
 
     A missed or rejected call becomes a zero-duration Disconnected event, which
     is exactly how the existing code recognises a missed call.
+
+    Each event also carries ``callStatus``, taken from the Android type code
+    rather than inferred from the duration. Duration alone cannot tell a call
+    missed by the user from an outgoing call the other party never picked up --
+    both are zero seconds -- so the distinction is preserved here and used by
+    ``get_call_log_blocks``.
     """
     adapted = []
     for record in records:
@@ -138,6 +144,17 @@ def adapt_call_log(records):
         direction = "Incoming" if call_type in ("incoming", "missed", "rejected") else "Outgoing"
         connected_duration = 0 if call_type in ("missed", "rejected") else duration
 
+        if call_type == "missed":
+            status = "missed"
+        elif call_type == "rejected":
+            status = "rejected"
+        elif duration == 0:
+            # Connected for zero seconds: an outgoing call nobody picked up, or
+            # an incoming one that never really started.
+            status = "no answer"
+        else:
+            status = "received"
+
         for event_type, event_duration in (
             (direction, 0),
             ("Connected", connected_duration),
@@ -150,6 +167,7 @@ def adapt_call_log(records):
                     "duration": event_duration,
                     "timestamp": timestamp,
                     "number": record.get("number"),
+                    "callStatus": status,
                 }
             )
     return adapted

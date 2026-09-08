@@ -58,11 +58,16 @@ FEATURE_DESCRIPTIONS = {
     "audio_convo_duration": "seconds spent in conversation",
     "audio_convo_num": "number of conversations detected",
     "audio_voice": "seconds a human voice was detected",
-    "call_in_duration": "seconds spent on incoming calls",
-    "call_in_num": "number of incoming calls",
-    "call_out_duration": "seconds spent on outgoing calls",
-    "call_out_num": "number of outgoing calls",
-    "call_miss_num": "number of missed calls",
+    # These call features are the study's own daily aggregates, computed
+    # separately from the raw call log and binned into four fixed epochs. They
+    # do not reconcile with the call log database (for user1's 2019-09-30 week
+    # they report 54/64/0 against the log's 46/40/17), so questions about call
+    # counts should go to the call log database instead.
+    "call_in_duration": "seconds spent on incoming calls, as aggregated by the study; use the call log database for call counts",
+    "call_in_num": "number of incoming calls, as aggregated by the study; use the call log database for call counts",
+    "call_out_duration": "seconds spent on outgoing calls, as aggregated by the study; use the call log database for call counts",
+    "call_out_num": "number of outgoing calls, as aggregated by the study; use the call log database for call counts",
+    "call_miss_num": "number of missed calls, as aggregated by the study; often 0 even when the call log records missed calls, so use the call log database for missed-call counts",
     "light_mean": "mean ambient light level",
     "light_std": "standard deviation of ambient light level",
     "loc_dist": "total distance travelled",

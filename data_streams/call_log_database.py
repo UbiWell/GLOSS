@@ -26,7 +26,7 @@ database_info = {
     "name": "call log database",
     "info": "Contains call log records, including timestamps, call types (e.g., 'incoming,' 'outgoing'), call durations, and phone ringing durations.",
     "device": "Phone",
-    "additional_instructions": "The call log database tracks phone call history including incoming, outgoing, and missed calls. This can indicate communication patterns and social interaction frequency."
+    "additional_instructions": "The call log database tracks phone call history including incoming, outgoing, missed, rejected and unanswered calls. This can indicate communication patterns and social interaction frequency. For any count of calls by type, call get_call_log_stats, which returns all of these counts at once, and read only the keys it documents; deriving counts by hand from get_call_log_blocks risks disagreeing with it. Missed and rejected calls are incoming calls and are already included in total_calls_incoming."
 }
 
 # Create function references mapping (function name -> actual function)
