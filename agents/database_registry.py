@@ -9,6 +9,44 @@ import inspect
 from typing import Dict, List, Any, Callable
 from dataclasses import dataclass
 
+# CSV each database reads, relative to sample_data/. A database whose file is
+# absent is skipped rather than advertised, so the agents never plan around a
+# data stream that cannot answer. Databases return automatically once their
+# file is present again.
+REQUIRED_DATA_FILES = {
+    'app_usage_database': 'running_apps_bd6de07d',
+    'call_log_database': 'calllog_bd6de07d',
+    'lock_unlock_database': 'unlock_data_bd6de07d',
+    'sms_database': 'smslog_bd6de07d',
+    'sensing_database': 'sensing_bd6de07d',
+    'activity_database': 'ios_activity',
+    'battery_database': 'ios_battery',
+    'brightness_database': 'ios_brightness',
+    'location_database': 'ios_location',
+    'phone_steps_database': 'ios_steps',
+    'wifi_database': 'ios_wifi',
+    'garmin_hr_database': 'garmin_hr',
+    'garmin_steps_database': 'garmin_steps',
+    'garmin_stress_database': 'garmin_stress',
+}
+
+
+def _sample_data_dir() -> str:
+    """Locate sample_data, matching how data_processing_utils resolves it."""
+    if os.getenv("RUNNING_IN_DOCKER") == "true":
+        return "/workspace/sample_data"
+    return os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', 'sample_data')
+    )
+
+
+def _has_backing_data(module_name: str) -> bool:
+    """True when the module needs no CSV, or its CSV exists."""
+    collection = REQUIRED_DATA_FILES.get(module_name)
+    if collection is None:
+        return True
+    return os.path.isfile(os.path.join(_sample_data_dir(), f'{collection}.csv'))
+
 @dataclass
 class DatabaseInfo:
     """Information about a database"""
@@ -51,7 +89,11 @@ class DatabaseRegistry:
                 # Skip original data files that shouldn't be registered as databases
                 if directory_name == 'data_streams' and not module_name.endswith('_database'):
                     continue
-                
+
+                if not _has_backing_data(module_name):
+                    print(f"Skipping {module_name}: no data file in {_sample_data_dir()}")
+                    continue
+
                 try:
                     # Import the module
                     module = importlib.import_module(f'{directory_name}.{module_name}')

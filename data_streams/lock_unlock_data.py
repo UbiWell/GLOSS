@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from data_processing.data_processing_utils import fetch_documents_between_timestamps
 
 from data_streams.constants import IOS_LOCK_UNLOCK, time_zone_dict
+from data_streams.dataset_adapters import adapt_lock_unlock
 
 import agents.generic_summarizer
 from agents.coding_agent import run_coding_agent
@@ -82,6 +83,7 @@ def get_lock_unlock_records(uid, start_time, end_time):
         start_time = start_time.timestamp()
         end_time = end_time.timestamp()
     lock_unlock_records = fetch_documents_between_timestamps(uid, start_time, end_time, IOS_LOCK_UNLOCK)
+    lock_unlock_records = adapt_lock_unlock(lock_unlock_records)
     return process_records(uid, lock_unlock_records)
 
 

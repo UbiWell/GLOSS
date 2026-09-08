@@ -1,0 +1,55 @@
+# Participant environment for the GLOSS tutorial.
+#
+# One container per participant, reached over SSH. GLOSS runs here as the "host"
+# side of the pair: it talks to the *host's* Docker daemon through the mounted
+# socket to run LLM-generated code in a separate gloss-sensemaking-code
+# container. See deploy/README.md for why the repo path must match the host's.
+#
+# Built FROM the executor image so the solved conda environment is reused: no
+# second 15-minute solve, identical package versions on both sides of the pair,
+# and all the heavy layers are shared on disk.
+FROM gloss-sensemaking-code:latest
+
+# The parent sets SHELL to `conda run ...`, which is right for running GLOSS but
+# awkward for image build steps. Back to a plain shell for the RUNs below.
+SHELL ["/bin/bash", "-c"]
+
+# The parent IS the code-executor image, so it sets RUNNING_IN_DOCKER=true.
+# GLOSS running *here* is the host side and must not see that: it would send
+# three code paths to /workspace/sample_data, which does not exist in this
+# container. Also refuse to inherit any baked credential.
+ENV RUNNING_IN_DOCKER=false \
+    GATEWAY_API_KEY="" \
+    MPLBACKEND=Agg \
+    PYTHONUNBUFFERED=1
+
+# openssh-server for participant login; docker CLI so participants and I can
+# inspect the sibling executor containers. No daemon runs here -- the mounted
+# host socket is used instead.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-server docker.io sudo less vim nano procps tmux \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /var/run/sshd
+
+# Participants get the env's interpreter as plain `python`, avoiding the
+# activate-vs-PATH confusion that bites on multi-python machines.
+RUN printf '%s\n' \
+        'export PATH="/opt/conda/envs/gloss-sensemaking/bin:$PATH"' \
+        'export CONDA_DEFAULT_ENV=gloss-sensemaking' \
+        > /etc/profile.d/00-gloss-path.sh \
+    && chmod 0644 /etc/profile.d/00-gloss-path.sh
+
+# Password auth is how participants log in; keep root login off.
+RUN sed -i \
+        -e 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' \
+        -e 's/^#\?PermitRootLogin.*/PermitRootLogin no/' \
+        -e 's/^#\?UsePAM.*/UsePAM yes/' \
+        /etc/ssh/sshd_config \
+    && printf 'ClientAliveInterval 60\nClientAliveCountMax 60\n' \
+        >> /etc/ssh/sshd_config
+
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+EXPOSE 22
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

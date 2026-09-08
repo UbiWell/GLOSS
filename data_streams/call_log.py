@@ -1,7 +1,6 @@
 import sys
 import os
 
-from data_processing.plotting_utils import plot_blocks
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data_processing')))
@@ -9,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'd
 from datetime import datetime
 from data_processing.data_processing_utils import fetch_documents_between_timestamps
 from data_streams.constants import IOS_CALLLOG, time_zone_dict
+from data_streams.dataset_adapters import adapt_call_log
 from agents.coding_agent import run_coding_agent
 import pytz
 
@@ -81,7 +81,7 @@ def get_call_log_records(uid, start_time, end_time):
 
     call_log_records = fetch_documents_between_timestamps(uid, start_time, end_time, IOS_CALLLOG)
 
-    return call_log_records
+    return adapt_call_log(call_log_records)
 
 
 def get_call_log_blocks(uid, start_time, end_time):

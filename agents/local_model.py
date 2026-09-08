@@ -46,10 +46,13 @@ except ImportError:  # pragma: no cover - newer autogen
     from autogen_core import FunctionCall  # noqa: F401
     from autogen_core.models import CreateResult, RequestUsage
 
-# Retried once each: the gateway returns these when a worker is slow,
-# unreachable, or all workers are momentarily offline.
-_RETRY_STATUS = (502, 503, 504)
-_MAX_ATTEMPTS = 3
+# Retried: the gateway returns these when a worker is slow, unreachable, or all
+# workers are momentarily offline. 429 and 500 matter once several people query
+# the same model at once, which is the tutorial's normal state.
+# 401/403 are deliberately absent -- a bad key or a non-allowlisted network will
+# not fix itself, so those fail fast with the gateway's own explanation.
+_RETRY_STATUS = (429, 500, 502, 503, 504)
+_MAX_ATTEMPTS = 4
 
 
 def get_api_key() -> Optional[str]:

@@ -29,6 +29,14 @@ REPO_ROOT = os.getenv(
     os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
 )
 
+# Path the HOST docker daemon resolves when bind-mounting the repo into the
+# code-execution container. Identical to REPO_ROOT normally, and must stay so
+# when GLOSS itself runs inside a container talking to the host's daemon: the
+# daemon resolves this path in its own filesystem, not ours, so a container-only
+# path would silently mount an empty directory and generated code would find no
+# data. Separable via GLOSS_BIND_ROOT if the two ever legitimately differ.
+BIND_ROOT = os.getenv("GLOSS_BIND_ROOT", REPO_ROOT)
+
 logger = logging.getLogger(EVENT_LOGGER_NAME)
 logger.addHandler(ConsoleLogHandler())
 logger.setLevel(logging.INFO)
@@ -40,9 +48,17 @@ async def coding_agent(user_query, system_prompt) -> TaskResult:
     client = get_llm_chat_openai()
 
     # Path to this repo, mounted into the container that runs generated code
+    # auto_remove/stop_container are on so each run cleans up after itself.
+    # Left off, every query leaves a stopped autogen-code-exec-* container
+    # behind, which fills the disk on a shared host running many instances.
+    # timeout defaults to 60s, which generated code that loads a few hundred
+    # thousand CSV rows can exceed once several containers compete for CPU.
+    # A timeout there surfaces as an apparent code bug, so give it room.
     async with DockerCommandLineCodeExecutor(work_dir=REPO_ROOT,
-                                             image=DOCKER_NAME, auto_remove=False,
-                                             stop_container=False) as code_executor:
+                                             bind_dir=BIND_ROOT,
+                                             image=DOCKER_NAME, auto_remove=True,
+                                             stop_container=True,
+                                             timeout=int(os.getenv("GLOSS_EXEC_TIMEOUT", "300"))) as code_executor:
         code_executor_agent = CodeExecutorAgent("code_executor", code_executor=code_executor)
         coding_assistant_agent = CodingAssistantAgent(
             "coding_assistant", model_client=client, system_message=system_prompt

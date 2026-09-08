@@ -1,0 +1,16 @@
+# Streamlit settings for the tutorial deployment.
+#
+# The UI runs inside a container and is reached through an SSH tunnel, so it
+# must listen on all interfaces rather than loopback, and must not try to open
+# a browser on the server.
+[server]
+address = "0.0.0.0"
+port = 8501
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+# The dashboard polls its worker thread in a loop; this keeps reruns cheap.
+fastReruns = true

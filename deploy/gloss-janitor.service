@@ -1,0 +1,8 @@
+[Unit]
+Description=Reap orphaned GLOSS code-executor containers
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gloss-janitor.sh

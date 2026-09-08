@@ -117,6 +117,17 @@ class SenseMaker:
 
         action_plans = self.invoke_with_retry(self.action_plan_generator_agent, 'invoke', {'user_query': self.user_query})
 
+        # invoke_with_retry returns the string "FAILED" once retries are spent.
+        # Without this check the "NOT POSSIBLE" test below reads as a substring
+        # match, falls through, and indexes a string.
+        if action_plans == "FAILED":
+            self.answer = ("Could not generate an action plan: the language model call failed. "
+                           "Check that GATEWAY_API_KEY is set and the model gateway is reachable.")
+            if verbose:
+                print(f"❌ {self.answer}")
+            self.current_step = "FINISH"
+            return
+
         if "NOT POSSIBLE" in action_plans:
             if verbose:
                 print("❌ Not possible to answer the question with current data")
@@ -133,23 +144,48 @@ class SenseMaker:
 
         while self.current_step != "END":
 
-            response = self.invoke_with_retry(self.next_step_agent, 'invoke_next_step', {
-                'user_query': self.user_query,
-                'memory': self.memory,
-                'understanding': self.understanding,
-                'action_plan': self.action_plan
-            })
-            try:
-                # response_dict = json.loads(response)
-                if "next_step" in response:
-                    state = response["next_step"]
-            except Exception as e:
-                if verbose:
-                    print(f"❌ Error in response: {str(e)}")
-                continue
+            # Counts attempts, not successes. The increment used to sit deep in
+            # the success path, so a failing step left it at zero, the
+            # num_iters >= max_iters exit below could never fire, and the loop
+            # spun indefinitely making LLM calls the whole time.
+            num_iters += 1
 
-            if verbose:
-                print(f"🔄 Returned state: {state}")
+            if num_iters > max_iters:
+                # Budget spent: stop asking what to do next and go present
+                # whatever understanding was built up.
+                if verbose:
+                    print(f"⚠️  Reached the {max_iters}-iteration limit without finishing; "
+                          f"presenting what is known so far")
+                state = "END"
+            else:
+                response = self.invoke_with_retry(self.next_step_agent, 'invoke_next_step', {
+                    'user_query': self.user_query,
+                    'memory': self.memory,
+                    'understanding': self.understanding,
+                    'action_plan': self.action_plan
+                })
+
+                state = None
+                try:
+                    # response_dict = json.loads(response)
+                    if isinstance(response, dict) and "next_step" in response:
+                        state = response["next_step"]
+                except Exception as e:
+                    if verbose:
+                        print(f"❌ Error in response: {str(e)}")
+                    continue
+
+                # A failed call returns the string "FAILED", not a dict, so state
+                # stays None. Retrying is fine; falling through would either raise
+                # UnboundLocalError or silently reuse the previous state.
+                if state is None or state not in self.state_dict:
+                    if verbose:
+                        print(f"❌ Next-step agent gave no usable state (got {response!r}); "
+                              f"attempt {num_iters} of {max_iters}")
+                    continue
+
+                if verbose:
+                    print(f"🔄 Returned state: {state}")
 
             self.current_step = self.state_dict[state]
             self.step_history.append(self.current_step)
@@ -242,7 +278,8 @@ class SenseMaker:
                     })
                     if (response != "FAILED"):
                         self.understanding = response['understanding']
-                    num_iters += 1
+                    # num_iters is incremented at the top of the loop now, so
+                    # that failing iterations also count against the budget.
                     if verbose:
                         print(f"🔄 Number of iterations: {num_iters}")
                     print_understanding(self.understanding, verbose)
@@ -264,7 +301,15 @@ class SenseMaker:
                     'understanding': self.understanding,
                     'instructions': self.presentation_instructions
                 })
-                self.answer = answer["response"]
+                # Same "FAILED" sentinel as the action-plan call. This one fires
+                # at the very end, so rather than lose a completed run to a
+                # TypeError, fall back to the understanding built up so far.
+                if answer == "FAILED" or not isinstance(answer, dict) or "response" not in answer:
+                    self.answer = (self.understanding or
+                                   "No answer could be produced.") + \
+                                  "\n\n(Presentation step failed; showing the raw understanding.)"
+                else:
+                    self.answer = answer["response"]
 
                 print("\n" + "🎉" * 20 + " FINAL ANSWER " + "🎉" * 20)
                 print(self.answer)
@@ -298,7 +343,7 @@ if __name__ == "__main__":
     clear and concise
     '''
     query = '''
-    on aug 28 2025, for test004 what was most used app by duration?'''
+    on nov 2 2020, for user1 how many text messages were sent and received, and how many hours were spent at home?'''
     SenseMaker(
         query,
         presentation_instructions_).make_sense(verbose=VERBOSE)

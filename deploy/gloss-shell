@@ -1,0 +1,31 @@
+#!/bin/bash
+# Login shell for tutorial accounts p01..p10.
+#
+# The provider's firewall only allows the main SSH port, so per-container
+# published ports (22001..22010) are unreachable from outside. Instead each
+# participant has a host account whose login shell is this script: it drops them
+# straight into their own container, at their own checkout.
+#
+# Set as the account's shell by deploy/setup_host_accounts.sh.
+set -uo pipefail
+
+PARTICIPANT="$(id -un)"
+CONTAINER="gloss-${PARTICIPANT}"
+REPO="/srv/gloss/${PARTICIPANT}"
+
+if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+    echo "Your GLOSS instance (${CONTAINER}) is not running." >&2
+    echo "Please tell the tutorial organiser." >&2
+    exit 1
+fi
+
+# `ssh user@host 'command'` arrives as `-c 'command'`. Preserved so scripted
+# checks (deploy/verify.sh) work over SSH as well as interactive logins.
+if [[ "${1:-}" == "-c" ]]; then
+    exec docker exec -u "$PARTICIPANT" -w "$REPO" "$CONTAINER" /bin/bash -lc "${2:-}"
+fi
+
+exec docker exec -it \
+    -e "TERM=${TERM:-xterm-256color}" \
+    -u "$PARTICIPANT" -w "$REPO" \
+    "$CONTAINER" /bin/bash -l

@@ -17,6 +17,7 @@ from data_processing.data_processing_utils import fetch_documents_between_timest
 from data_streams.lock_unlock_data import get_lock_unlock_blocks
 
 from data_streams.constants import APP_USAGE_LOGS, IOS_LOCK_UNLOCK, time_zone_dict
+from data_streams.dataset_adapters import adapt_running_apps
 
 app_map = {
     "SNAP": "SnapChat",
@@ -126,6 +127,7 @@ def get_app_usage_records(uid, start_time, end_time, debug=False):
 
 
     app_usage_records = fetch_documents_between_timestamps(uid, start_time, end_time, APP_USAGE_LOGS)
+    app_usage_records = adapt_running_apps(app_usage_records)
 
 
     lock_unlock_blocks = get_lock_unlock_blocks(uid, start_time_orig, end_time_orig)

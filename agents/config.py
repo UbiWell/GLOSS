@@ -2,10 +2,14 @@ import os
 
 USE_AZURE = False
 USE_GPT5 = False
-ONLY_CODE_FUNCTIONS = True
-VERBOSE = True
-DOCKER_NAME = "gloss-sensemaking-code"
 USE_CSV = True
+
+# Env-overridable so that many instances can share one identical checkout and
+# differ only by environment (see the LOCAL_MODEL_* block below for the same
+# pattern).
+ONLY_CODE_FUNCTIONS = os.getenv("ONLY_CODE_FUNCTIONS", "True").lower() == "true"
+VERBOSE = os.getenv("VERBOSE", "True").lower() == "true"
+DOCKER_NAME = os.getenv("DOCKER_NAME", "gloss-sensemaking-code")
 
 # Master switch for the model backend.
 #   True  -> every LLM call goes to a local Ollama model (Khoury GPU gateway).

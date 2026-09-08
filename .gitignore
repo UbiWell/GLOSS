@@ -43,3 +43,9 @@ Thumbs.db
 .ipynb_checkpoints/
 
 
+
+# Tutorial deployment: generated credentials and handouts. These contain every
+# participant's password and must never be committed.
+deploy/participants.txt
+deploy/GLOSS-tutorial-logins.pdf
+deploy/GLOSS-tutorial-logins.html
