@@ -345,8 +345,6 @@ if __name__ == "__main__":
     # ---- EDIT THIS: ask your own question, then re-run the script ----------
     # The user id in the sample data is always "user1". Data spans 2019-2022;
     # 2020-11-02 is a well-populated day to start from.
-    # The closing ''' is kept on its own line so the question can be replaced
-    # outright -- in vi, cc on that line -- without retyping the quotes.
     query = '''
     on nov 2 2020, for user1 how many text messages were sent and received, and how many hours were spent at home?
     '''
