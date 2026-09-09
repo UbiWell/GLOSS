@@ -71,7 +71,7 @@ def build_html(rows, host: str, port: str) -> str:
         f'      <tr><td class="mono">{html.escape(r["user"])}</td>'
         f'<td class="mono">{html.escape(r["password"])}</td>'
         f'<td class="mono">ssh -p {html.escape(port)} {html.escape(r["user"])}@{html.escape(host)}</td>'
-        f'<td class="mono">ssh -p {html.escape(port)} -L 8501:localhost:{html.escape(r["uiport"] or "8501")} '
+        f'<td class="mono">ssh -p {html.escape(port)} -L 8501:127.0.0.1:{html.escape(r["uiport"] or "8501")} '
         f'{html.escape(r["user"])}@{html.escape(host)}</td></tr>'
         for r in rows
     )
@@ -129,7 +129,7 @@ by opening a public address. It takes two steps.</p>
 <p><strong>Step 1.</strong> Log out if you are already connected, then reconnect
 using the <em>Browser UI login</em> command from your row in the table. It is the
 same login with a tunnel added:</p>
-<pre>ssh -p {port} -L 8501:localhost:&lt;your UI port&gt; p01@{host}</pre>
+<pre>ssh -p {port} -L 8501:127.0.0.1:&lt;your UI port&gt; p01@{host}</pre>
 
 <p><strong>Step 2.</strong> In that session, start the dashboard:</p>
 <pre>streamlit run sensemaking_ui.py</pre>
