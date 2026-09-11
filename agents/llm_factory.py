@@ -11,8 +11,13 @@ from langchain_openai import ChatOpenAI
 from agents.config import USE_AZURE, USE_GPT5, USE_LOCAL_MODEL
 
 
-def get_llmchat():
+def get_llmchat(agent=None):
     """Return a configured chat LLM instance based on config flags.
+
+    Args:
+        agent (str): Display name of the agent asking, e.g. "Next-step agent".
+            Recorded in the run trace so the dashboard can name who spoke.
+            Only the local backend records it; the OpenAI paths ignore it.
 
     Priority:
     - If USE_LOCAL_MODEL: return OllamaChatModel (local GPU cluster, no OpenAI key)
@@ -25,7 +30,7 @@ def get_llmchat():
         # module or its config is unavailable.
         from agents.local_model import OllamaChatModel
 
-        return OllamaChatModel()
+        return OllamaChatModel(agent=agent)
     if USE_GPT5:
         return ChatOpenAI(openai_api_key=os.getenv("OPENAI_API_KEY"), model_name="gpt-5")
     if USE_AZURE:
@@ -40,7 +45,7 @@ def get_llmchat():
     return ChatOpenAI(openai_api_key=os.getenv("OPENAI_API_KEY"), model_name="gpt-4o", temperature=0)
 
 
-def get_llm_chat_openai(model_name: str = "gpt-4o", temperature: float = 0):
+def get_llm_chat_openai(model_name: str = "gpt-4o", temperature: float = 0, agent=None):
     """Return the AutoGen model client used by the coding agent.
 
     Args:
@@ -58,7 +63,7 @@ def get_llm_chat_openai(model_name: str = "gpt-4o", temperature: float = 0):
     if USE_LOCAL_MODEL:
         from agents.local_model import LangChainModelClient
 
-        return LangChainModelClient(temperature=temperature)
+        return LangChainModelClient(temperature=temperature, agent=agent)
 
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:

@@ -112,8 +112,11 @@ class RunTrace:
 
     def llm_call(self, *, model, seconds, prompt_tokens=None, completion_tokens=None,
                  worker=None, attempt=1, chars=None, messages=None, response=None,
-                 thinking=None):
+                 thinking=None, agent=None):
         """Record one model request.
+
+        ``agent`` names which agent made the call -- the stage alone is not
+        enough, because several agents run inside one stage.
 
         ``messages`` is the prompt in Ollama's own format; it is stored as the
         list of turns so a reader can tell the system instructions apart from
@@ -135,7 +138,7 @@ class RunTrace:
 
         self.add(LLM_CALL, model=model, seconds=round(seconds, 3),
                  prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-                 worker=worker, attempt=attempt, chars=chars,
+                 worker=worker, attempt=attempt, chars=chars, agent=agent,
                  messages=turns,
                  response=_clip(response),
                  thinking=_clip(thinking) or None)

@@ -45,7 +45,7 @@ logger.setLevel(logging.INFO)
 
 async def coding_agent(user_query, system_prompt) -> TaskResult:
     # Local Ollama client or OpenAI client, depending on USE_LOCAL_MODEL
-    client = get_llm_chat_openai()
+    client = get_llm_chat_openai(agent="Coding agent")
 
     # Path to this repo, mounted into the container that runs generated code
     # auto_remove/stop_container are on so each run cleans up after itself.

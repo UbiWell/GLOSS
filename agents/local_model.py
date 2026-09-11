@@ -101,8 +101,13 @@ def chat(
     think: Optional[bool] = None,
     stop: Optional[Sequence[str]] = None,
     timeout: Optional[int] = None,
+    agent: Optional[str] = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """Send a chat request to the Ollama gateway and return (text, metadata).
+
+    ``agent`` is a display name for whoever is calling, recorded in the trace
+    so the dashboard can say which agent spoke rather than which stage it
+    happened in.
 
     ``messages`` uses Ollama's own format: ``{"role": ..., "content": ...}``
     with roles ``system``, ``user`` or ``assistant``.
@@ -157,6 +162,7 @@ def chat(
                 messages=messages,
                 response=text,
                 thinking=meta.get("thinking"),
+                agent=agent,
             )
             return text, meta
         except RuntimeError as exc:
@@ -248,6 +254,9 @@ class OllamaChatModel(BaseChatModel):
     num_predict: int = LOCAL_MODEL_NUM_PREDICT
     think: bool = LOCAL_MODEL_THINK
     request_timeout: int = LOCAL_MODEL_TIMEOUT
+    # Which agent owns this instance. Each agent module builds its own, so the
+    # name is set once at construction and is right for every call it makes.
+    agent: Optional[str] = None
 
     @property
     def _llm_type(self) -> str:
@@ -277,6 +286,7 @@ class OllamaChatModel(BaseChatModel):
             think=self.think,
             stop=stop,
             timeout=self.request_timeout,
+            agent=self.agent,
         )
 
         message = AIMessage(
@@ -319,9 +329,11 @@ class LangChainModelClient:
     ``CodeExecutorAgent`` extracts and runs.
     """
 
-    def __init__(self, model: Optional[str] = None, temperature: Optional[float] = None):
+    def __init__(self, model: Optional[str] = None, temperature: Optional[float] = None,
+                 agent: Optional[str] = None):
         self.model = model or LOCAL_MODEL_NAME
         self.temperature = LOCAL_MODEL_TEMPERATURE if temperature is None else temperature
+        self.agent = agent
         self._actual_usage = RequestUsage(prompt_tokens=0, completion_tokens=0)
         self._total_usage = RequestUsage(prompt_tokens=0, completion_tokens=0)
 
@@ -352,6 +364,7 @@ class LangChainModelClient:
             ollama_messages,
             model=self.model,
             temperature=self.temperature,
+            agent=self.agent,
         )
 
         usage = RequestUsage(

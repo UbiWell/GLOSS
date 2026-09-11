@@ -12,7 +12,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from agents.llm_factory import get_llmchat
 from agents.database_registry import get_all_databases
 
-llmchat = get_llmchat()
+llmchat = get_llmchat(agent="Information-seeking agent")
 
 
 class Output(BaseModel):

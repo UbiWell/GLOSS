@@ -18,7 +18,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../agen
 from pydantic import BaseModel, Field
 from agents.llm_factory import get_llmchat
 
-llmchat = get_llmchat()
+llmchat = get_llmchat(agent="Summarizer")
 
 
 class Output(BaseModel):

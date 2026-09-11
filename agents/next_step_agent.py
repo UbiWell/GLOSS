@@ -15,7 +15,7 @@ from langchain_core.runnables import RunnablePassthrough
 from pydantic import BaseModel, Field
 from agents.llm_factory import get_llmchat
 
-llmchat = get_llmchat()
+llmchat = get_llmchat(agent="Next-step agent")
 
 
 class OutputNextStep(BaseModel):

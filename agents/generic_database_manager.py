@@ -17,7 +17,7 @@ from agents.llm_factory import get_llmchat
 from agents.database_registry import get_all_databases, get_functions_for_database, get_database
 from agents.config import ONLY_CODE_FUNCTIONS
 
-llmchat = get_llmchat()
+llmchat = get_llmchat(agent="Database manager")
 
 '''This module defines a generic database manager agent that take a information request and requried databases. 
 It then passes all helper functions to the Coding Agent to generate the code that can answer the question.'''

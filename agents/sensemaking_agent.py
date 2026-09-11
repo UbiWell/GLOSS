@@ -17,7 +17,7 @@ from agents.data_driver import all_functions
 from agents.data_driver import run_function_from_dict, json_to_dict, get_function_description
 from agents.llm_factory import get_llmchat
 
-llmchat = get_llmchat()
+llmchat = get_llmchat(agent="Sensemaking agent")
 
 
 class Output(BaseModel):

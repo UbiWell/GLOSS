@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from langchain_core.output_parsers import JsonOutputParser
 from agents.llm_factory import get_llmchat
 
-llmchat = get_llmchat()
+llmchat = get_llmchat(agent="Presentation agent")
 
 
 class Output(BaseModel):

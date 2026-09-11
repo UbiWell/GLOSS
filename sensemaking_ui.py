@@ -102,13 +102,15 @@ TAB_NOTES = {
         "language model, not computing over your data."
     ),
     "activity": (
-        "One entry per model call, in order, with the exact prompt that was sent "
-        "and the exact reply that came back -- open 'Exact prompt sent' to read "
-        "what an agent was actually asked. Each entry also shows which stage was "
-        "asking, how long the model took, how many tokens went in and out, and "
-        "which GPU worker served it. Prompts grow as memory accumulates, so "
-        "later calls in a run are usually slower than earlier ones. Very long "
-        "prompts are clipped in the middle; both ends are kept."
+        "One entry per model call, in order, naming the agent that made it -- the "
+        "next-step agent, the information-seeking agent, the coding agent, and "
+        "so on -- with the exact prompt that was sent and the exact reply that "
+        "came back. Open 'Exact prompt sent' to read what an agent was actually "
+        "asked. Each entry also shows how long the model took, how many tokens "
+        "went in and out, and which GPU worker served it. Prompts grow as "
+        "memory accumulates, so later calls in a run are usually slower than "
+        "earlier ones. Very long prompts are clipped in the middle; both ends "
+        "are kept."
     ),
     "code": (
         "GLOSS does not query your data directly. It writes Python, runs it in a "
@@ -342,6 +344,11 @@ def render_overview(maker, trace):
         st.markdown(maker.understanding)
 
 
+def stage_label(stage):
+    """'INFORMATION SEEKING' -> 'information seeking', for secondary text."""
+    return (stage or "").replace("_", " ").lower() or "unknown stage"
+
+
 def render_exchange(event):
     """The exact prompt sent and the exact reply received, for one model call.
 
@@ -401,20 +408,29 @@ def render_activity(trace):
         if kind == "llm_call":
             with st.chat_message("assistant"):
                 tokens = f"{event.get('prompt_tokens') or 0} in / {event.get('completion_tokens') or 0} out"
-                st.markdown(f"**{stage}** asked the model")
+                # The agent's name, not the stage: several agents run inside
+                # one stage, and a stage name does not tell a participant who
+                # is speaking. The stage stays as secondary context below.
+                st.markdown(f"**{event.get('agent') or 'A model call'}**")
                 st.caption(
-                    f"{event['seconds']:.1f}s · {tokens} tokens · "
-                    f"worker {event.get('worker') or 'unknown'}"
+                    f"during {stage_label(stage)} · {event['seconds']:.1f}s · "
+                    f"{tokens} tokens · worker {event.get('worker') or 'unknown'}"
                     + (f" · attempt {event['attempt']}" if event.get("attempt", 1) > 1 else "")
                 )
                 render_exchange(event)
         elif kind == "db_query":
             with st.chat_message("user"):
-                st.markdown(f"**{stage}** queried {', '.join(event.get('databases') or [])}")
-                st.caption(event.get("request") or "")
+                st.markdown(
+                    f"**Database manager** queried "
+                    f"{', '.join(event.get('databases') or []) or 'the data'}"
+                )
+                st.caption(
+                    (event.get("request") or "")
+                    + f"  ·  during {stage_label(stage)}"
+                )
         elif kind == "answer":
             with st.chat_message("assistant"):
-                st.markdown("**PRESENTATION** produced the final answer")
+                st.markdown("**Presentation agent** produced the final answer")
         else:
             with st.chat_message("assistant"):
                 st.error(f"{event.get('where')}: {event.get('message')}")
