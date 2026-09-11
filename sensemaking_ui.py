@@ -1,422 +1,397 @@
-import base64
+"""
+GLOSS dashboard.
+
+Shows a sensemaking run as it happens: which agent is working, what it decided,
+the code it generated, what running that code produced, and how memory and
+understanding build up.
+
+Everything on screen comes from two sources:
+
+- ``SenseMaker`` attributes for the current text (action plan, memory,
+  understanding, answer);
+- ``SenseMaker.trace`` for the event history -- stage transitions, model calls
+  with their latency and token counts, the coding agent's conversation, and
+  errors. See agents/run_trace.py.
+
+The run happens on a worker thread, which must never call ``st.*``; the trace is
+the only channel between it and this script.
+
+Targets the Streamlit pinned in environment_linux.yml (1.39), so no widgets
+newer than that are used.
+"""
+
+import json
+import threading
 
 import streamlit as st
-import time
-import threading
+
 import sensemaking_process
-import json
+from agents.config import LOCAL_MODEL_NAME, USE_LOCAL_MODEL
+from agents.database_registry import get_all_databases
+
+st.set_page_config(page_title="GLOSS", page_icon="🔍", layout="wide")
+
+EXAMPLE_QUERIES = [
+    "on nov 2 2020, for user1 what was the most used app by duration?",
+    "on nov 2 2020, for user1 how many text messages were sent and received?",
+    "on nov 2 2020, for user1 how many hours were spent at home?",
+    "on nov 2 2020, for user1 how many calls were missed?",
+]
+
+DEFAULT_INSTRUCTIONS = "clear and concise"
+
+for key, value in {
+    "sense_maker": None,
+    "worker": None,
+    "query": EXAMPLE_QUERIES[0],
+    "instructions": DEFAULT_INSTRUCTIONS,
+}.items():
+    st.session_state.setdefault(key, value)
 
 
-def start_sense_making(query_input, presentation_instructions):
-    if st.session_state.status == "Completed":
-        reset_state()
-        st.session_state.retain_results = False
+# --------------------------------------------------------------------------
+# Run control
+# --------------------------------------------------------------------------
 
-    if 'sense_maker' not in st.session_state:
-        st.session_state.sense_maker = sensemaking_process.SenseMaker(
-            query_input,
-            presentation_instructions
+def is_running():
+    worker = st.session_state.worker
+    return worker is not None and worker.is_alive()
+
+
+def has_finished():
+    maker = st.session_state.sense_maker
+    return maker is not None and not is_running()
+
+
+def start_run(query, instructions):
+    maker = sensemaking_process.SenseMaker(query, instructions or DEFAULT_INSTRUCTIONS)
+    st.session_state.sense_maker = maker
+
+    def work():
+        # A crash here would otherwise leave the dashboard waiting forever, so
+        # record it on the trace and mark the run finished.
+        try:
+            maker.make_sense(verbose=True)
+        except Exception as exc:  # noqa: BLE001 - surfaced in the UI
+            maker.trace.error(where="run", message=exc)
+            maker.answer = f"The run failed: {exc}"
+            maker.current_step = "FINISH"
+
+    worker = threading.Thread(target=work, daemon=True)
+    st.session_state.worker = worker
+    worker.start()
+
+
+def stop_run():
+    maker = st.session_state.sense_maker
+    if maker is not None:
+        maker.cancel.set()
+
+
+# --------------------------------------------------------------------------
+# Sidebar
+# --------------------------------------------------------------------------
+
+with st.sidebar:
+    st.subheader("Ask a question")
+
+    st.session_state.query = st.text_area(
+        "Question",
+        value=st.session_state.query,
+        height=110,
+        disabled=is_running(),
+        help="The user id in the sample data is always user1.",
+    )
+    st.session_state.instructions = st.text_input(
+        "How should the answer be presented?",
+        value=st.session_state.instructions,
+        disabled=is_running(),
+    )
+
+    if is_running():
+        st.button("Running…", disabled=True, use_container_width=True)
+        st.button("Stop", on_click=stop_run, use_container_width=True)
+    else:
+        st.button(
+            "Run",
+            type="primary",
+            use_container_width=True,
+            disabled=not st.session_state.query.strip(),
+            on_click=lambda: start_run(st.session_state.query, st.session_state.instructions),
         )
 
-    if not st.session_state.sensemaker_running:
-        st.session_state.sensemaker_running = True
-        st.session_state.status = "Running"
-
-
-        threading.Thread(target=st.session_state.sense_maker.make_sense).start()
-
-
-def reset_state():
-    for key in st.session_state.keys():
-        if key == "sense_maker":
-            del st.session_state[key]
-
-
-# UI Layout
-st.set_page_config(page_title="GLOSS: Sensemaking System", page_icon="🔍", layout="wide")
-st.markdown("""
-    <style>
-        .vertical-line {
-            border-left: 3px solid black; /* Bold black line */
-            height: 10vh; /* Set height to 10% of viewport height */
-            position: absolute; /* Ensure it takes up its column */
-            left: 45%; /* Shift towards the left (adjust percentage as needed) */
-            margin-top: -5vh; /* Adjust top margin to bring it closer to the heading */
-            margin-bottom: 5vh; /* Maintain bottom margin */
-        }
-        .col2-container {
-            padding-left: 20px; /* Add padding before col2 */
-        }
-        .column-container {
-            position: relative; /* Parent container for proper alignment */
-            display: flex; /* Ensure columns are aligned properly */
-        }
-    </style>
-""", unsafe_allow_html=True)
-st.title("GLOSS: Sensemaking System 🔍")
-# Layout with padding and vertical line
-col1, col2 = st.columns([3, 1], gap="medium")  # Adjust proportions for layout
-
-# Wrap columns in a container for styling
-st.markdown('<div class="column-container">', unsafe_allow_html=True)
-
-# Column 1 content
-
-
-# st.markdown("""
-#     <style>
-#         .bold-line {
-#             border: none;
-#             border-top: 2px solid black;
-#             margin: 0;
-#             padding: 0;
-#         }
-#         .bold-line:before {
-#             content: '';
-#             display: block;
-#             border-top: 2px solid black;
-#             margin-top: 10px;
-#             margin-bottom: 10px;
-#         }
-#     </style>
-#     <div class="bold-line"></div>
-# """, unsafe_allow_html=True)
-
-# Column 2 content with additional padding
-with col1:
-    st.markdown('<div class="col2-container">', unsafe_allow_html=True)
-    query_input = st.text_input("Enter your query:", placeholder="Type your question here...")
-    presentation_instructions = st.text_input("Enter presentation instructions:",
-                                              placeholder="Type instructions here...")
-    st.markdown('</div>', unsafe_allow_html=True)
-    if st.button("Start Sense-Making", key="start_button", help="Click to initiate the sense-making process."):
-        start_sense_making(query_input, presentation_instructions)
-
-st.markdown('</div>', unsafe_allow_html=True)  # Close the column container
-
-if 'sensemaker_running' not in st.session_state:
-    st.session_state.sensemaker_running = False
-
-if 'retain_results' not in st.session_state:
-    st.session_state.retain_results = False
-
-
-
-if 'status' not in st.session_state:
-    st.session_state.status = "Not started"
-
-# CSS for colored boxes and scrolling
-# Add CSS for light and dark mode compatibility
-st.markdown("""
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
-        .box {
-            border-radius: 5px;
-            padding: 15px;
-            margin: 10px 0;
-            color: inherit;  /* Adapts text color to current theme */
-            overflow-y: auto;
-            max-height: 300px;  /* Adjust height as needed */
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .current-step { background-color: var(--secondary-background-color); border: 1px solid var(--text-color); }
-     .memory { 
-    background-color: #BBDEFB; 
-    border: 1px solid #90CAF9; 
-    color: black; /* Text color set to black */
-}
-
-.understanding { 
-    background-color: #FFF9C4; 
-    border: 1px solid #FFE082; 
-    color: black; /* Text color set to black */
-}
-
-.information-request { 
-    background-color: #FFCDD2; 
-    border: 1px solid #FFAB91; 
-    color: black; /* Text color set to black */
-}
-
-.action-plan { 
-    background-color: #FDDAC4; 
-    border: 1px solid #FCA191; 
-    color: black; /* Text color set to black */
-}
-
-.function-calls { 
-    background-color: #d8c5ed; 
-    border: 1px solid #FCA191; 
-    color: black; /* Text color set to black */
-}
-
-        .status-container {
-            background-color: var(--secondary-background-color); 
-            border: 1px solid var(--text-color);
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            color: inherit; /* Adapts to text color of current theme */
-        }
-        .status-icon {
-            vertical-align: middle;
-            margin-right: 5px;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# Real-time display containers
-
-with col2:
-    status_container = st.empty()
-    current_step_container = st.empty()
-
-sense_cols = st.columns(5)
-
-with sense_cols[0]:
-    with st.expander("Action Plan", expanded=True):
-        hypothesis_container = st.empty()
-        download_hypothesis_container = st.empty()
-with sense_cols[1]:
-    with st.expander("Information Requests", expanded=True):
-        info_request_container = st.empty()
-        download_info_request_container = st.empty()
-with sense_cols[2]:
-    with st.expander("Memory", expanded=True):
-        memory_container = st.empty()
-        download_memory_container = st.empty()
-with sense_cols[3]:
-    with st.expander("Understanding", expanded=True):
-        understanding_container = st.empty()
-        download_understanding_container = st.empty()
-
-with sense_cols[4]:
-    with st.expander("Function Calls", expanded=True):
-        function_call_container = st.empty()
-        download_function_call_container = st.empty()
-
-
-def open_in_new_window(content, title="Content"):
-    """
-    Creates a downloadable link to open content in a new tab.
-    """
-    st.link_button("Open in new window", "https://docs.streamlit.io/develop/api-reference/widgets/st.link_button")
-
-
-# Real-time update function
-import os
-
-import os
-import webbrowser
-import streamlit as st
-
-
-import os
-import webbrowser
-
-def create_and_link_html(content, title="Page", filename="page.html"):
-    """
-    Creates a local HTML file dynamically and provides a clickable link to open it.
-    Args:
-        content (str): The content of the HTML page.
-        title (str): The title of the HTML page.
-        filename (str): The name of the file to save locally.
-    """
-    # Define the HTML structure with improved styling
-    html_template = f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>{title}</title>
-            <style>
-                body {{
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    margin: 0;
-                    padding: 0;
-                    background-color: #f4f7f6;
-                    color: #333;
-                    line-height: 1.6;
-                    display: block;  /* Change from flex to block */
-                    height: 100vh;
-                    box-sizing: border-box;
-                    overflow: hidden;
-                }}
-                .container {{
-                    width: 80%;
-                    max-width: 900px;
-                    max-height: 90%;
-                    background-color: #fff;
-                    border-radius: 10px;
-                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-                    padding: 20px;
-                    text-align: left;  /* Align text to the left */
-                    overflow-y: auto; /* Enable vertical scrolling if content is too long */
-                    margin: 0 auto;  /* Center container horizontally */
-                }}
-                h1 {{
-                    color: #2c3e50;
-                    font-size: 2em;
-                    margin-bottom: 20px;
-                    text-align: center;  /* Keep heading centered */
-                }}
-                .content-box {{
-                    background-color: #ecf0f1;
-                    padding: 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-                    font-size: 1.1em;
-                    color: #2c3e50;
-                    white-space: pre-wrap; /* Preserve formatting */
-                    text-align: left;  /* Ensure content is aligned to the left */
-                }}
-                .footer {{
-                    margin-top: 20px;
-                    font-size: 0.9em;
-                    color: #7f8c8d;
-                    text-align: center; /* Footer remains centered */
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>{title}</h1>
-                <div class="content-box">
-                    \n{content}
-                </div>
-                <div class="footer">
-                    <p>Presented by GLOSS Sensemaking System</p>
-                </div>
-            </div>
-        </body>
-        </html>
-    """
-
-    # Save the HTML file
-    with open(filename, "w") as f:
-        f.write(html_template)
-
-    # Get the absolute path of the file
-    file_path = os.path.abspath(filename)
-    file_url = f"file://{file_path}"
-
-    # Attempt to open the file in the default web browser
-    try:
-        webbrowser.open(file_url)
-        print("success")
-    except Exception as e:
-        print(f"Error opening file: {e}")
-
-
-
-def render_button():
-    with download_hypothesis_container:
-        if st.button("Open in New Tab", key=f"action_plan"):
-            if "sense_maker" in st.session_state:
-                create_and_link_html(st.session_state.sense_maker.action_plan, f"Action Plan")
-                update_dashboard()
-
-    with download_info_request_container:
-        if st.button("Open in New Tab", key=f"ir"):
-            if "sense_maker" in st.session_state:
-                content = json.dumps(st.session_state.sense_maker.information_request)
-                create_and_link_html(content, f"Information Requests")
-                update_dashboard()
-
-    with download_memory_container:
-        if st.button("Open in New Tab", key=f"memory"):
-            if "sense_maker" in st.session_state:
-                create_and_link_html(st.session_state.sense_maker.memory, f"Memory")
-                update_dashboard()
-
-    with download_understanding_container:
-        if st.button("Open in New Tab", key=f"understanding"):
-            if "sense_maker" in st.session_state:
-                create_and_link_html(st.session_state.sense_maker.understanding, f"Understanding")
-                update_dashboard()
-
-    with download_function_call_container:
-        if st.button("Open in New Tab", key=f"function_calls"):
-            if "sense_maker" in st.session_state:
-                content = json.dumps(st.session_state.sense_maker.function_calls, indent=4)
-                create_and_link_html(content, f"Funtion Calls")
-                update_dashboard()
-
-
-def update_dashboard():
-    timestamp = time.time()
-    with status_container:
-        st.markdown(
-            f'<div class="status-container"><span class="status-icon">🔄</span>Status: {st.session_state.status}</div>',
-            unsafe_allow_html=True)
-
-    with current_step_container:
-        with st.expander("Current Step", expanded=True):
-            st.markdown('<div class="box current-step"><p>{}</p></div>'.format(
-                st.session_state.sense_maker.current_step), unsafe_allow_html=True)
-
-    with hypothesis_container:
-        st.markdown(
-            '<div class="box action-plan"><p>{}</p></div>'.format(
-                st.session_state.sense_maker.action_plan),
-            unsafe_allow_html=True)
-
-    with info_request_container:
-        info_request_content = "<ul>" + "".join(
-            f"<li>{item}</li>" for item in st.session_state.sense_maker.information_request) + "</ul>"
-
-        st.markdown(f'<div class="box information-request">{info_request_content}</div>',
-                    unsafe_allow_html=True)
-
-    with memory_container:
-        st.markdown(
-            '<div class="box memory"><p>{}</p></div>'.format(st.session_state.sense_maker.memory),
-            unsafe_allow_html=True)
-
-
-    with understanding_container:
-
-        st.markdown(
-            '<div class="box understanding"><p>{}</p></div>'.format(
-                st.session_state.sense_maker.understanding),
-            unsafe_allow_html=True)
-
-
-    with function_call_container:
-        function_call_content = "<ul>" + "".join(
-            f"<li>{item}</li>" for item in st.session_state.sense_maker.function_calls) + "</ul>"
-
-        st.markdown(f'<div class="box function-calls">{function_call_content}</div>',
-                    unsafe_allow_html=True)
-
-
-render_button()
-# Keep the UI updating periodically while the process runs
-if st.session_state.sensemaker_running:
-    while st.session_state.sensemaker_running and st.session_state.sense_maker.current_step != "FINISH":
-        update_dashboard()
-        time.sleep(1)  # Smooth update every second
-
-# Once the process is complete, display the final results
-if st.session_state.sensemaker_running and st.session_state.sense_maker.current_step == "FINISH":
-    with st.expander("Final Answer", expanded=True):
-        st.session_state.status = "Completed"
-        st.session_state.sensemaker_running = False
-        st.session_state.retain_results = True
-        update_dashboard()
-        st.write(st.session_state.sense_maker.answer)  # Show the final answer in an expander
-    st.success("Completed SenseMaking")
-    st.balloons()
-
-elif st.session_state.retain_results:
-    with st.expander("Final Answer", expanded=True):
-        st.write(st.session_state.sense_maker.answer)
-    st.success("Completed SenseMaking")
-
-
-# Footer with additional styling
-st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown("<footer style='text-align: center;'>© 2024 GLOSS Sensemaking System</footer>", unsafe_allow_html=True)
+    st.divider()
+    st.caption("Examples — click to load one")
+    for index, example in enumerate(EXAMPLE_QUERIES):
+        st.button(
+            example,
+            key=f"example_{index}",
+            disabled=is_running(),
+            use_container_width=True,
+            on_click=lambda e=example: st.session_state.update(query=e),
+        )
+
+    st.divider()
+    databases = get_all_databases()
+    st.caption(
+        f"Model: {LOCAL_MODEL_NAME if USE_LOCAL_MODEL else 'OpenAI'}  ·  "
+        f"{len(databases)} databases"
+    )
+    with st.expander("Available data"):
+        for name, info in sorted((n, d.info) for n, d in databases.items()):
+            st.markdown(f"**{name}**")
+            st.caption(info)
+
+
+# --------------------------------------------------------------------------
+# Rendering helpers
+# --------------------------------------------------------------------------
+
+def stage_timeline(trace, current_step):
+    """The stages the run has moved through, with how long each took."""
+    stages = [e for e in trace.events(kind="stage") if e.get("name")]
+    if not stages:
+        st.caption("Waiting for the first stage…")
+        return
+
+    for index, event in enumerate(stages):
+        name = event["name"]
+        if index + 1 < len(stages):
+            duration = stages[index + 1]["elapsed"] - event["elapsed"]
+            label = f"{name} — {duration:.1f}s"
+            icon = "✅"
+        elif name in ("FINISH", "END"):
+            label, icon = name, "✅"
+        else:
+            label, icon = f"{name} — running", "⏳"
+        st.markdown(f"{icon}  {label}")
+
+
+def render_overview(maker, trace):
+    summary = trace.summary()
+    columns = st.columns(4)
+    columns[0].metric("Elapsed", f"{summary.get('elapsed', 0):.0f}s")
+    columns[1].metric("Model calls", summary.get("llm_calls", 0))
+    columns[2].metric(
+        "Tokens",
+        f"{summary.get('prompt_tokens', 0) + summary.get('completion_tokens', 0):,}",
+    )
+    columns[3].metric("Code runs", summary.get("code_rounds", 0))
+
+    errors = trace.events(kind="error")
+    if errors:
+        with st.container(border=True):
+            st.error(f"{len(errors)} problem(s) during this run")
+            for event in errors[-4:]:
+                st.caption(f"**{event.get('where')}** — {event.get('message')}")
+
+    if maker.answer:
+        st.subheader("Answer")
+        with st.container(border=True):
+            st.markdown(maker.answer)
+
+    left, right = st.columns([1, 1])
+    with left:
+        st.subheader("Progress")
+        stage_timeline(trace, maker.current_step)
+    with right:
+        st.subheader("Action plan")
+        st.markdown(maker.action_plan or "_not generated yet_")
+
+    if maker.understanding:
+        st.subheader("Understanding so far")
+        st.markdown(maker.understanding)
+
+
+def render_activity(trace):
+    """Chronological feed of what the agents did."""
+    events = [
+        e for e in trace.events()
+        if e["kind"] in ("llm_call", "db_query", "error", "answer")
+    ]
+    if not events:
+        st.caption("No agent activity yet.")
+        return
+
+    for event in events:
+        kind = event["kind"]
+        stage = event.get("stage") or "—"
+
+        if kind == "llm_call":
+            with st.chat_message("assistant"):
+                tokens = f"{event.get('prompt_tokens') or 0} in / {event.get('completion_tokens') or 0} out"
+                st.markdown(f"**{stage}** asked the model")
+                st.caption(
+                    f"{event['seconds']:.1f}s · {tokens} tokens · "
+                    f"worker {event.get('worker') or 'unknown'}"
+                    + (f" · attempt {event['attempt']}" if event.get("attempt", 1) > 1 else "")
+                )
+        elif kind == "db_query":
+            with st.chat_message("user"):
+                st.markdown(f"**{stage}** queried {', '.join(event.get('databases') or [])}")
+                st.caption(event.get("request") or "")
+        elif kind == "answer":
+            with st.chat_message("assistant"):
+                st.markdown("**PRESENTATION** produced the final answer")
+        else:
+            with st.chat_message("assistant"):
+                st.error(f"{event.get('where')}: {event.get('message')}")
+
+
+def render_code(trace):
+    """The coding agent's conversation: request, code, and what it printed."""
+    events = [
+        e for e in trace.events()
+        if e["kind"] in ("code_task", "code_proposed", "code_output")
+    ]
+    if not events:
+        st.caption(
+            "No code generated yet. GLOSS writes Python to answer the question, "
+            "runs it in a container, and reads the output."
+        )
+        return
+
+    for event in events:
+        kind = event["kind"]
+        if kind == "code_task":
+            st.markdown("**The coding agent was asked to:**")
+            st.info(event.get("request") or "")
+        elif kind == "code_proposed":
+            if event.get("has_code"):
+                st.markdown(f"**Generated code** (round {event.get('round_index')})")
+                st.code(event.get("code_block") or "", language="python")
+                with st.expander("The agent's full message"):
+                    st.markdown(event.get("code") or "")
+            else:
+                st.markdown(f"**The agent said** (round {event.get('round_index')})")
+                st.markdown(event.get("code") or "")
+        else:
+            st.markdown("**Output from running it**")
+            st.code(event.get("output") or "", language="text")
+        st.divider()
+
+
+def render_memory(maker):
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Memory")
+        st.caption("What the run has established so far, one question at a time.")
+        if maker.memory.strip():
+            st.text_area("memory", maker.memory, height=420,
+                         label_visibility="collapsed", disabled=True)
+            st.download_button("Download memory", maker.memory,
+                               file_name="gloss-memory.txt")
+        else:
+            st.caption("_empty_")
+    with right:
+        st.subheader("Understanding")
+        st.caption("The running synthesis that becomes the final answer.")
+        if maker.understanding.strip():
+            st.text_area("understanding", maker.understanding, height=420,
+                         label_visibility="collapsed", disabled=True)
+            st.download_button("Download understanding", maker.understanding,
+                               file_name="gloss-understanding.txt")
+        else:
+            st.caption("_empty_")
+
+
+def render_data(maker, trace):
+    st.subheader("Information requests")
+    requests = trace.events(kind="db_query")
+    if requests:
+        st.dataframe(
+            [{"databases": ", ".join(e.get("databases") or []),
+              "request": e.get("request")} for e in requests],
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.caption("None yet.")
+
+    st.subheader("Data functions called")
+    calls = maker.function_calls
+    if calls:
+        rows = []
+        for call in calls:
+            if isinstance(call, dict):
+                rows.append({"function": call.get("name"),
+                             "params": json.dumps(call.get("params", {}), default=str)})
+            else:
+                rows.append({"function": str(call), "params": ""})
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
+        st.caption("None yet. With code generation on, GLOSS usually calls data "
+                   "functions from inside the generated code instead.")
+
+
+def render_trace(trace):
+    events = trace.events()
+    st.caption(
+        f"{len(events)} events. This is the raw record of the run — useful for "
+        "seeing exactly what happened, and for comparing two runs."
+    )
+    if events:
+        st.dataframe(
+            [{"seq": e["seq"], "at": f"{e['elapsed']:.1f}s",
+              "stage": e.get("stage"), "kind": e["kind"]} for e in events],
+            use_container_width=True, hide_index=True, height=420,
+        )
+        st.download_button("Download trace (JSON)", trace.to_json(),
+                           file_name="gloss-trace.json", mime="application/json")
+
+
+# --------------------------------------------------------------------------
+# Main area
+# --------------------------------------------------------------------------
+
+st.title("GLOSS 🔍")
+st.caption("Group of LLMs for Open-ended Sensemaking of passive sensing data")
+
+# Only poll while a run is in flight; otherwise render once. A fragment keeps
+# the rest of the page interactive, unlike the blocking loop this replaces.
+@st.fragment(run_every=1.0 if is_running() else None)
+def live_area():
+    maker = st.session_state.sense_maker
+
+    if maker is None:
+        st.info("Enter a question in the sidebar, or pick an example, then press Run.")
+        with st.expander("What happens when you run one?"):
+            st.markdown(
+                "- **Action plan** — an agent decides how to approach the question\n"
+                "- **Information seeking** — it chooses which databases to ask\n"
+                "- **Code generation** — it writes Python, runs it in a container, "
+                "and reads the output\n"
+                "- **Local / global sensemaking** — results become memory, then a "
+                "running understanding\n"
+                "- **Presentation** — the understanding is turned into an answer\n\n"
+                "Each tab above shows one of these. Code generation prints nothing "
+                "while it runs; a few minutes of quiet is normal."
+            )
+        return
+
+    trace = maker.trace
+
+    if is_running():
+        st.info(f"Running — {maker.current_step or 'starting'}", icon="⏳")
+    elif trace.events(kind="error"):
+        st.warning("Finished with problems — see Overview.", icon="⚠️")
+    else:
+        st.success("Finished", icon="✅")
+
+    overview, activity, code, memory, data, raw = st.tabs(
+        ["Overview", "Agent activity", "Generated code", "Memory", "Data", "Trace"]
+    )
+    with overview:
+        render_overview(maker, trace)
+    with activity:
+        render_activity(trace)
+    with code:
+        render_code(trace)
+    with memory:
+        render_memory(maker)
+    with data:
+        render_data(maker, trace)
+    with raw:
+        render_trace(trace)
+
+
+live_area()

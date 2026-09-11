@@ -15,6 +15,8 @@ from agents import sensemaking_agent, information_seeking_agent, \
 from agents.database_registry import get_all_databases
 from agents.next_step_agent import NextStepAgent
 from agents.config import VERBOSE
+import threading
+
 from agents import run_trace
 
 max_iters = 3
@@ -88,6 +90,10 @@ class SenseMaker:
         # anyone who wants to inspect a run afterwards. Purely additive: with
         # nothing reading it the pipeline behaves exactly as before.
         self.trace = run_trace.RunTrace()
+        # Set by a caller (the dashboard) to ask the run to stop. Checked
+        # between stages, so a stop takes effect at the next boundary rather
+        # than interrupting a model call mid-flight.
+        self.cancel = threading.Event()
         self._current_step = ""
         self.understanding = ''
         self.action_plan = ''
@@ -167,6 +173,15 @@ class SenseMaker:
         num_iters = 0
 
         while self.current_step != "END":
+
+            if self.cancel.is_set():
+                if verbose:
+                    print("⏹  Stopped at the caller's request")
+                self.trace.error(where="run", message="stopped by the user")
+                self.answer = (self.understanding or
+                               "Stopped before an answer was produced.")
+                self.current_step = "FINISH"
+                return
 
             # Counts attempts, not successes. The increment used to sit deep in
             # the success path, so a failing step left it at zero, the
