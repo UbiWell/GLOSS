@@ -47,6 +47,27 @@ ANSWER = "answer"                # the final answer was produced
 
 _MAX_EVENTS = 5000  # a runaway loop must not exhaust memory
 
+# Prompts grow as memory accumulates, and a long run can hold tens of them, so
+# the recorded text is clipped. Head and tail are kept rather than just the
+# head: the head carries the agent's instructions and the tail carries the
+# actual question and the memory it was given, and both are what a reader is
+# trying to see.
+_MAX_TEXT = 12000
+
+
+def _clip(text, limit=_MAX_TEXT):
+    """Shorten `text` for storage, keeping both ends and saying what was cut."""
+    if text is None:
+        return None
+    text = str(text)
+    if len(text) <= limit:
+        return text
+    head, tail = limit * 2 // 3, limit // 3
+    removed = len(text) - head - tail
+    return (f"{text[:head]}\n\n"
+            f"[... {removed:,} characters omitted from the middle ...]\n\n"
+            f"{text[-tail:]}")
+
 
 class RunTrace:
     """Thread-safe, append-only log of what happened during a run."""
@@ -90,10 +111,34 @@ class RunTrace:
         self.add(STAGE, name=name, previous=previous)
 
     def llm_call(self, *, model, seconds, prompt_tokens=None, completion_tokens=None,
-                 worker=None, attempt=1, chars=None):
+                 worker=None, attempt=1, chars=None, messages=None, response=None,
+                 thinking=None):
+        """Record one model request.
+
+        ``messages`` is the prompt in Ollama's own format; it is stored as the
+        list of turns so a reader can tell the system instructions apart from
+        the question. ``response`` is what came back, and ``thinking`` the
+        reasoning trace when the model emits one.
+        """
+        # Flattened defensively rather than inline in the add() call: add()
+        # swallows its own failures, but an argument expression is evaluated
+        # before add() is entered, so a prompt in an unexpected shape would
+        # raise straight into the pipeline. Instrumentation must not do that.
+        try:
+            turns = [
+                {"role": str(m.get("role") or "user"),
+                 "content": _clip(m.get("content") or "")}
+                for m in (messages or [])
+            ]
+        except Exception:  # pragma: no cover - shape we do not produce ourselves
+            turns = []
+
         self.add(LLM_CALL, model=model, seconds=round(seconds, 3),
                  prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-                 worker=worker, attempt=attempt, chars=chars)
+                 worker=worker, attempt=attempt, chars=chars,
+                 messages=turns,
+                 response=_clip(response),
+                 thinking=_clip(thinking) or None)
 
     def code_proposed(self, *, source, code, round_index=None):
         self.add(CODE_PROPOSED, source=source, code=code, round_index=round_index)

@@ -102,10 +102,13 @@ TAB_NOTES = {
         "language model, not computing over your data."
     ),
     "activity": (
-        "One entry per model call, in order. Each shows which stage was asking, "
-        "how long the model took, how many tokens went in and out, and which GPU "
-        "worker served it. Prompts grow as memory accumulates, so later calls in "
-        "a run are usually slower than earlier ones."
+        "One entry per model call, in order, with the exact prompt that was sent "
+        "and the exact reply that came back -- open 'Exact prompt sent' to read "
+        "what an agent was actually asked. Each entry also shows which stage was "
+        "asking, how long the model took, how many tokens went in and out, and "
+        "which GPU worker served it. Prompts grow as memory accumulates, so "
+        "later calls in a run are usually slower than earlier ones. Very long "
+        "prompts are clipped in the middle; both ends are kept."
     ),
     "code": (
         "GLOSS does not query your data directly. It writes Python, runs it in a "
@@ -339,6 +342,48 @@ def render_overview(maker, trace):
         st.markdown(maker.understanding)
 
 
+def render_exchange(event):
+    """The exact prompt sent and the exact reply received, for one model call.
+
+    Everything is shown with st.code rather than st.markdown: prompts and
+    replies contain JSON, braces and generated Python, which markdown would
+    reflow or swallow. The ask here is fidelity, so the text is reproduced
+    verbatim -- and st.code gives a copy button, which is what someone
+    comparing a prompt against a reply actually wants.
+    """
+    messages = event.get("messages") or []
+    reply = event.get("response")
+    thinking = event.get("thinking")
+
+    if not messages and reply is None:
+        # Traces recorded before prompt capture existed, or a non-local model,
+        # which does not route through local_model.chat().
+        st.caption("_Prompt and reply were not recorded for this call._")
+        return
+
+    if messages:
+        turns = ", ".join(
+            f"{m.get('role')} {len(m.get('content') or ''):,} chars" for m in messages
+        )
+        with st.expander(f"Exact prompt sent — {len(messages)} turn(s): {turns}"):
+            for message in messages:
+                st.caption(f"**{(message.get('role') or 'user').upper()}**")
+                st.code(message.get("content") or "", language=None)
+
+    if reply is not None:
+        # A preview inline, because the point of this tab is to see what each
+        # agent said without a click per call; the full text is one click away.
+        preview = reply if len(reply) <= 400 else reply[:400] + " …"
+        st.code(preview, language=None)
+        if len(reply) > 400:
+            with st.expander(f"Exact reply in full — {len(reply):,} chars"):
+                st.code(reply, language=None)
+
+    if thinking:
+        with st.expander(f"The model's reasoning — {len(thinking):,} chars"):
+            st.code(thinking, language=None)
+
+
 def render_activity(trace):
     """Chronological feed of what the agents did."""
     events = [
@@ -362,6 +407,7 @@ def render_activity(trace):
                     f"worker {event.get('worker') or 'unknown'}"
                     + (f" · attempt {event['attempt']}" if event.get("attempt", 1) > 1 else "")
                 )
+                render_exchange(event)
         elif kind == "db_query":
             with st.chat_message("user"):
                 st.markdown(f"**{stage}** queried {', '.join(event.get('databases') or [])}")

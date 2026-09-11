@@ -152,6 +152,11 @@ def chat(
                 worker=meta.get("worker"),
                 attempt=attempt,
                 chars=prompt_chars,
+                # The exact prompt and reply, so the dashboard can show what
+                # each agent actually asked and got back. The trace clips them.
+                messages=messages,
+                response=text,
+                thinking=meta.get("thinking"),
             )
             return text, meta
         except RuntimeError as exc:
