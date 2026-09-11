@@ -46,6 +46,7 @@ for key, value in {
     "worker": None,
     "query": EXAMPLE_QUERIES[0],
     "instructions": DEFAULT_INSTRUCTIONS,
+    "run_active": False,
 }.items():
     st.session_state.setdefault(key, value)
 
@@ -77,7 +78,14 @@ def start_run(query, instructions):
             maker.trace.error(where="run", message=exc)
             maker.answer = f"The run failed: {exc}"
             maker.current_step = "FINISH"
+        finally:
+            # In a finally so the clock stops on a crash and on a cancellation,
+            # not just on a clean finish.
+            maker.trace.finish()
 
+    # Watched by live_area so it can hand the controls back the moment the
+    # thread exits, without the participant having to press Stop first.
+    st.session_state.run_active = True
     worker = threading.Thread(target=work, daemon=True)
     st.session_state.worker = worker
     worker.start()
@@ -568,6 +576,16 @@ def live_area():
         return
 
     trace = maker.trace
+
+    if st.session_state.run_active and not is_running():
+        # The worker thread has just exited. This function is a fragment, and a
+        # fragment rerun does not re-execute the main script body -- which is
+        # where the sidebar's Run button lives -- so the controls would stay
+        # stuck on "Running…" until something forced a full rerun. Pressing
+        # Stop used to be the only thing that did. Do it automatically instead,
+        # once, which also re-evaluates run_every and ends the polling.
+        st.session_state.run_active = False
+        st.rerun(scope="app")
 
     if is_running():
         st.info(f"Running — {maker.current_step or 'starting'}", icon="⏳")

@@ -77,6 +77,7 @@ class RunTrace:
         self._events = []
         self._seq = 0
         self.started_at = time.time()
+        self.finished_at = None
         self._stage = None
 
     # --- recording ---------------------------------------------------------
@@ -98,6 +99,17 @@ class RunTrace:
                 })
         except Exception:  # pragma: no cover - instrumentation must not break a run
             pass
+
+    def finish(self):
+        """Mark the run over, so elapsed stops counting. Idempotent.
+
+        Without this, summary()'s elapsed is measured against time.time() and
+        keeps climbing after the answer is in, which reads as a run that never
+        ended.
+        """
+        with self._lock:
+            if self.finished_at is None:
+                self.finished_at = time.time()
 
     def enter_stage(self, name):
         """Note that the pipeline moved to a new stage.
@@ -183,8 +195,11 @@ class RunTrace:
         """Aggregates worth putting on a dashboard."""
         events = self.events()
         calls = [e for e in events if e["kind"] == LLM_CALL]
+        # Frozen once the run has finished; live while it is still going.
+        end = self.finished_at or time.time()
         return {
-            "elapsed": round(time.time() - self.started_at, 1),
+            "elapsed": round(end - self.started_at, 1),
+            "finished": self.finished_at is not None,
             "stages": sum(1 for e in events if e["kind"] == STAGE),
             "llm_calls": len(calls),
             "llm_seconds": round(sum(e.get("seconds") or 0 for e in calls), 1),
@@ -198,6 +213,7 @@ class RunTrace:
     def to_json(self, indent=2):
         return json.dumps(
             {"started_at": self.started_at,
+             "finished_at": self.finished_at,
              "summary": self.summary(),
              "events": self.events()},
             indent=indent, default=str,
@@ -212,6 +228,7 @@ class NullTrace:
     """
 
     def add(self, *a, **k): pass
+    def finish(self, *a, **k): pass
     def enter_stage(self, *a, **k): pass
     def llm_call(self, *a, **k): pass
     def code_proposed(self, *a, **k): pass
