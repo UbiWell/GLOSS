@@ -237,7 +237,7 @@ functions = {
             "end_time": {"type": "str", "description": "The end of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
             "feature": {"type": "str", "description": "The feature name, e.g. 'act_still', 'audio_convo_duration' or a daily-only place feature such as 'loc_home_dur'. Call list_sensing_features first if unsure."}
         },
-        "returns": "A list of per-day values for the feature.",
+        "returns": "A list of per-day values for the feature. Raises ValueError if the feature name is not recognised, or if it is recorded only by hour or epoch.",
         "example": "[{'date': '2020-11-02', 'feature': 'act_still', 'value': 77001.0}]"
     },
     "SENSE3": {
@@ -250,7 +250,7 @@ functions = {
             "end_time": {"type": "str", "description": "The end of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
             "feature": {"type": "str", "description": "The feature family name, e.g. 'act_still'."}
         },
-        "returns": "A list of per-day epoch breakdowns. 'whole_day' is the daily total, not a fourth epoch, and equals the sum of the three epochs for additive features.",
+        "returns": "A list of per-day epoch breakdowns. 'whole_day' is the daily total, not a fourth epoch, and equals the sum of the three epochs for additive features. Raises ValueError naming the granularities a feature does have, if it is not recorded at this one -- the loc_* place features are daily-only, for instance.",
         "example": "[{'date': '2020-11-02', 'feature': 'act_still', 'whole_day': 77001.0, '00:00-09:00': 31115.0, '09:00-18:00': 27563.0, '18:00-24:00': 18322.0}]"
     },
     "SENSE4": {
@@ -263,7 +263,7 @@ functions = {
             "end_time": {"type": "str", "description": "The end of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
             "feature": {"type": "str", "description": "The feature family name, e.g. 'act_still'."}
         },
-        "returns": "A list of per-day, per-hour values with 'hour' as an integer from 0 to 23.",
+        "returns": "A list of per-day, per-hour values with 'hour' as an integer from 0 to 23. Raises ValueError naming the granularities a feature does have, if it is not recorded at this one -- the loc_* place features are daily-only, for instance.",
         "example": "[{'date': '2020-11-02', 'feature': 'act_still', 'hour': 0, 'value': 3308.0}]"
     },
 }
@@ -392,7 +392,7 @@ def get_sensing_daily(uid, start_time, end_time, feature):
 
     column = _daily_column(frame, feature)
     if column is None:
-        return _unknown_feature(feature, frame)
+        _reject_feature(feature, frame, "daily")
 
     return [
         {"date": row["date"].strftime("%Y-%m-%d"), "feature": feature, "value": _clean(row[column])}
@@ -407,7 +407,7 @@ def get_sensing_by_epoch(uid, start_time, end_time, feature):
 
     columns = _feature_columns(frame, feature, "ep")
     if not columns:
-        return _unknown_feature(feature, frame, time_resolved_only=True)
+        _reject_feature(feature, frame, "epoch")
 
     results = []
     for _, row in frame.iterrows():
@@ -429,7 +429,7 @@ def get_sensing_hourly(uid, start_time, end_time, feature):
 
     columns = _feature_columns(frame, feature, "hr")
     if not columns:
-        return _unknown_feature(feature, frame, time_resolved_only=True)
+        _reject_feature(feature, frame, "hourly")
 
     results = []
     for _, row in frame.iterrows():
@@ -443,24 +443,57 @@ def get_sensing_hourly(uid, start_time, end_time, feature):
     return results
 
 
-def _unknown_feature(feature, frame, time_resolved_only=False):
-    """Explain an unrecognised feature rather than returning silently empty."""
-    time_resolved, daily_only = _families(frame)
-    if time_resolved_only:
-        return {
-            "error": f"Sensing feature '{feature}' has no epoch or hourly breakdown.",
-            "hint": "Daily-only features such as the loc_* place features are available through get_sensing_daily.",
-            "available_features": [
-                {"feature": f, "description": describe_feature(f)} for f in time_resolved
-            ],
-        }
-    return {
-        "error": f"Unknown sensing feature '{feature}'.",
-        "available_features": [
-            {"feature": f, "description": describe_feature(f)}
-            for f in time_resolved + daily_only
-        ],
-    }
+def _name_list(names, limit=12):
+    """Feature names as one short line, so a traceback stays readable."""
+    shown = ", ".join(names[:limit])
+    remaining = len(names) - limit
+    return f"{shown}, and {remaining} more" if remaining > 0 else shown
+
+
+def _reject_feature(feature, frame, wanted):
+    """Raise, explaining what this feature does support and what to call.
+
+    This used to return a dict describing the problem, while the success path
+    returned a list of rows. Generated code does the natural thing with what it
+    gets back -- ``for entry in result: entry["date"]`` -- which iterates a
+    dict's keys and dies with "string indices must be integers", a message that
+    says nothing about the real mistake and hides the advice that was sitting
+    in the dict. Raising puts the explanation in the traceback, which is what
+    the coding agent reads before it retries, and leaves these getters with one
+    honest return type: a list of rows.
+
+    Coverage is ragged in the real data: a feature may have hourly columns but
+    no daily one, or daily and epoch but no hourly. So report the granularities
+    this particular feature actually has rather than assuming the three come
+    as a set -- naming the wrong replacement function just buys a second
+    failure.
+    """
+    available = []
+    if _daily_column(frame, feature) is not None:
+        available.append(("daily", "get_sensing_daily"))
+    if _feature_columns(frame, feature, "ep"):
+        available.append(("epoch", "get_sensing_by_epoch"))
+    if _feature_columns(frame, feature, "hr"):
+        available.append(("hourly", "get_sensing_hourly"))
+
+    if not available:
+        time_resolved, daily_only = _families(frame)
+        raise ValueError(
+            f"Unknown sensing feature '{feature}'.\n"
+            f"Call find_sensing_feature(uid, '<plain-language description>') and use the "
+            f"name it ranks first, rather than guessing a name.\n"
+            f"Available features: {_name_list(time_resolved + daily_only)}."
+        )
+
+    options = "; ".join(
+        f"{label} via {function}(uid, start_time, end_time, '{feature}')"
+        for label, function in available
+    )
+    raise ValueError(
+        f"Sensing feature '{feature}' is not recorded at {wanted} granularity, so "
+        f"this function cannot return it.\n"
+        f"It is available as: {options}."
+    )
 
 
 if __name__ == "__main__":
