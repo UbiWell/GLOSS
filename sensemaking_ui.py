@@ -22,6 +22,7 @@ newer than that are used.
 
 import json
 import threading
+import time
 
 import streamlit as st
 
@@ -89,6 +90,94 @@ def stop_run():
 
 
 # --------------------------------------------------------------------------
+# Tutorial affordances: short explanations, and errors turned into advice
+# --------------------------------------------------------------------------
+
+TAB_NOTES = {
+    "overview": (
+        "GLOSS answers a question by passing it between several agents. This tab "
+        "summarises the whole run: how long each stage took, the plan it chose, "
+        "the understanding it built up, and the final answer. The metrics are "
+        "worth a look -- most of the elapsed time is usually spent waiting on the "
+        "language model, not computing over your data."
+    ),
+    "activity": (
+        "One entry per model call, in order. Each shows which stage was asking, "
+        "how long the model took, how many tokens went in and out, and which GPU "
+        "worker served it. Prompts grow as memory accumulates, so later calls in "
+        "a run are usually slower than earlier ones."
+    ),
+    "code": (
+        "GLOSS does not query your data directly. It writes Python, runs it in a "
+        "container, reads what the code printed, and uses that as evidence. This "
+        "tab shows that loop: the request, the code, and the output. If the code "
+        "fails, the agent sees the error and tries again -- you will see several "
+        "rounds when that happens."
+    ),
+    "memory": (
+        "Memory is the record of each question GLOSS asked of the data and what "
+        "came back. Understanding is the running synthesis built from it, and is "
+        "what the final answer is written from. Watching these grow is the "
+        "clearest view of how the system reasons."
+    ),
+    "data": (
+        "Which databases were consulted, and with what request. With code "
+        "generation enabled, the data functions are usually called from inside "
+        "the generated code rather than directly, so the lower table is often "
+        "empty -- look at the Generated code tab instead."
+    ),
+    "trace": (
+        "The raw event log for this run. Every stage change, model call, piece of "
+        "generated code and error, in order. Download it to compare two runs, or "
+        "to see exactly where the time went."
+    ),
+}
+
+
+def explain(key):
+    """A short, collapsed note about what the tab is showing."""
+    note = TAB_NOTES.get(key)
+    if note:
+        with st.expander("What am I looking at?"):
+            st.markdown(note)
+
+
+def diagnose(message):
+    """Turn a model-gateway failure into something a participant can act on.
+
+    The raw errors are accurate but unhelpful to someone seeing them for the
+    first time, and the difference between them matters: one needs the
+    organiser, one needs patience, one needs a different model.
+    """
+    text = str(message)
+    lowered = text.lower()
+
+    if "401" in text or "unauthorized" in lowered:
+        return ("The model rejected our credentials.",
+                "The access key is missing or wrong. This one is for the "
+                "organiser to fix -- it is not something you did.")
+    if "not permitted on this gateway" in lowered or "allowed_models" in lowered:
+        return ("That model is not available on this cluster.",
+                "The gateway only serves certain models. The error above lists "
+                "the permitted ones; tell the organiser which you need.")
+    if "403" in text:
+        return ("The cluster refused the connection.",
+                "It only accepts requests from recognised networks, which "
+                "usually means the server's access has lapsed. Tell the "
+                "organiser; retrying will not help.")
+    if any(code in text for code in ("429", "500", "502", "503", "504")) or "timed out" in lowered:
+        return ("The shared model is busy or slow.",
+                "Several people are likely querying it at once. Wait a moment "
+                "and run again -- GLOSS already retries a few times on its own.")
+    if "could not reach" in lowered or "connection" in lowered:
+        return ("Could not reach the model.",
+                "The network path to the cluster is down. Tell the organiser.")
+    if "stopped by the user" in lowered:
+        return ("You stopped this run.", "Press Run to start another.")
+    return (None, None)
+
+
+# --------------------------------------------------------------------------
 # Sidebar
 # --------------------------------------------------------------------------
 
@@ -132,6 +221,32 @@ with st.sidebar:
         )
 
     st.divider()
+
+    # A two-second check, so a gateway problem is found before a minute-long
+    # run fails on it. Runs in the script thread deliberately: it is short, and
+    # the result is wanted immediately.
+    if st.button("Check model connection", use_container_width=True,
+                 disabled=is_running()):
+        from agents import local_model
+        with st.spinner("Contacting the model…"):
+            try:
+                started = time.monotonic()
+                reply, meta = local_model.chat(
+                    [{"role": "user", "content": "Reply with the single word: ok"}],
+                    num_predict=16,
+                )
+                st.success(
+                    f"Reachable in {time.monotonic() - started:.1f}s "
+                    f"(worker {meta.get('worker') or 'unknown'})"
+                )
+            except Exception as exc:  # noqa: BLE001 - reported below
+                headline, advice = diagnose(exc)
+                st.error(headline or "Could not reach the model.")
+                if advice:
+                    st.caption(advice)
+                with st.expander("Technical detail"):
+                    st.caption(str(exc))
+
     databases = get_all_databases()
     st.caption(
         f"Model: {LOCAL_MODEL_NAME if USE_LOCAL_MODEL else 'OpenAI'}  ·  "
@@ -178,12 +293,26 @@ def render_overview(maker, trace):
     )
     columns[3].metric("Code runs", summary.get("code_rounds", 0))
 
+    elapsed = summary.get("elapsed") or 0
+    waiting = summary.get("llm_seconds") or 0
+    if elapsed and waiting:
+        st.caption(
+            f"{waiting:.0f}s of the {elapsed:.0f}s was spent waiting on the language "
+            f"model ({waiting / elapsed * 100:.0f}%). The model is shared, so a run "
+            "takes longer when others are querying it at the same time."
+        )
+
     errors = trace.events(kind="error")
     if errors:
+        latest = errors[-1].get("message", "")
+        headline, advice = diagnose(latest)
         with st.container(border=True):
-            st.error(f"{len(errors)} problem(s) during this run")
-            for event in errors[-4:]:
-                st.caption(f"**{event.get('where')}** — {event.get('message')}")
+            st.error(headline or f"{len(errors)} problem(s) during this run")
+            if advice:
+                st.markdown(advice)
+            with st.expander(f"Technical detail ({len(errors)} event(s))"):
+                for event in errors:
+                    st.caption(f"**{event.get('where')}** — {event.get('message')}")
 
     if maker.answer:
         st.subheader("Answer")
@@ -381,16 +510,22 @@ def live_area():
         ["Overview", "Agent activity", "Generated code", "Memory", "Data", "Trace"]
     )
     with overview:
+        explain("overview")
         render_overview(maker, trace)
     with activity:
+        explain("activity")
         render_activity(trace)
     with code:
+        explain("code")
         render_code(trace)
     with memory:
+        explain("memory")
         render_memory(maker)
     with data:
+        explain("data")
         render_data(maker, trace)
     with raw:
+        explain("trace")
         render_trace(trace)
 
 
