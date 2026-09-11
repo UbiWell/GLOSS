@@ -222,9 +222,15 @@ with st.sidebar:
 
     st.divider()
 
-    # A two-second check, so a gateway problem is found before a minute-long
-    # run fails on it. Runs in the script thread deliberately: it is short, and
-    # the result is wanted immediately.
+    # A quick check, so a gateway problem is found before a minute-long run
+    # fails on it. Runs in the script thread deliberately: it is short, and the
+    # result is wanted immediately.
+    #
+    # The short timeout is the point. chat() otherwise inherits
+    # LOCAL_MODEL_TIMEOUT (600s) and retries four times, so a gateway that
+    # accepts the connection and then hangs -- which is how an overloaded
+    # worker actually fails -- would freeze this page for far longer than the
+    # run it was meant to save.
     if st.button("Check model connection", use_container_width=True,
                  disabled=is_running()):
         from agents import local_model
@@ -234,6 +240,7 @@ with st.sidebar:
                 reply, meta = local_model.chat(
                     [{"role": "user", "content": "Reply with the single word: ok"}],
                     num_predict=16,
+                    timeout=20,
                 )
                 st.success(
                     f"Reachable in {time.monotonic() - started:.1f}s "
@@ -492,8 +499,9 @@ def live_area():
                 "- **Local / global sensemaking** — results become memory, then a "
                 "running understanding\n"
                 "- **Presentation** — the understanding is turned into an answer\n\n"
-                "Each tab above shows one of these. Code generation prints nothing "
-                "while it runs; a few minutes of quiet is normal."
+                "Once a run starts, each of those steps gets its own tab. Code "
+                "generation prints nothing while it runs; a few minutes of "
+                "quiet is normal."
             )
         return
 
