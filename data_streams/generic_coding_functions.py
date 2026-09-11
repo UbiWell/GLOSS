@@ -1,3 +1,4 @@
+import re
 import sys
 import os
 from termios import VERASE
@@ -12,6 +13,7 @@ from data_processing.data_processing_utils import fetch_documents_between_timest
 from data_streams.constants import GARMIN_STEPS, time_zone_dict
 from agents.coding_agent import run_coding_agent
 from agents.config import VERBOSE
+from agents import run_trace
 
 
 coding_functions = {
@@ -92,9 +94,76 @@ class GenericCodingFunctions:
 
         results = run_coding_agent(user_query=user_query, database=self.databases, functions=self.functions,
                                    include_statements=include_statements, function_imports=function_imports)
+
+        # The full round-robin conversation is recorded before it is reduced
+        # below. It holds the code the assistant proposed, the executor's
+        # output, and any retry after a failure -- the most informative part of
+        # a run, and previously discarded. Recording it does not change what
+        # this function returns.
+        _record_coding_conversation(getattr(results, "messages", None), user_query)
+
         if (not results.messages):
             return "The code generation couldn't answer this query. Please try again later."
         else:
             return results.messages[-2].content + "\n" + results.messages[-1].content.replace("TERMINATE", "")
 
 
+
+
+def _record_coding_conversation(messages, user_query):
+    """Record the coding agent's conversation on the active run trace.
+
+    The conversation has three kinds of turn, and they are worth separating
+    because only one of them is code:
+
+    - the ``user`` turn, which is the request the agent was given;
+    - ``code_executor`` turns, which carry the output of running the code;
+    - the assistant's turns, which may contain a fenced code block, or may just
+      be its plan or its closing summary.
+
+    Assistant turns therefore record both the full message and the extracted
+    code block, with ``has_code`` saying whether there was one, so a consumer
+    can show real code without guessing.
+
+    Wrapped so a problem here can never break a run that otherwise succeeded.
+    """
+    trace = run_trace.current()
+    if not messages:
+        trace.error(where="code generation", message="the coding agent returned no messages")
+        return
+
+    try:
+        round_index = 0
+        for message in messages:
+            source = (getattr(message, "source", "") or "").lower()
+            content = getattr(message, "content", "")
+            if not isinstance(content, str) or not content.strip():
+                continue
+
+            if "executor" in source:
+                trace.code_output(source=source, output=content, round_index=round_index)
+            elif source == "user":
+                # The task the coding agent was asked to carry out.
+                trace.add("code_task", source=source, request=content)
+            else:
+                round_index += 1
+                block = _extract_code_block(content)
+                trace.add(
+                    run_trace.CODE_PROPOSED,
+                    source=source,
+                    code=content,
+                    code_block=block,
+                    has_code=block is not None,
+                    round_index=round_index,
+                )
+    except Exception as exc:  # pragma: no cover - instrumentation only
+        trace.error(where="recording code generation", message=exc)
+
+
+_CODE_FENCE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL)
+
+
+def _extract_code_block(content):
+    """Return the first fenced code block in a message, or None."""
+    match = _CODE_FENCE.search(content)
+    return match.group(1).rstrip() if match else None

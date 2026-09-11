@@ -15,6 +15,7 @@ from agents import sensemaking_agent, information_seeking_agent, \
 from agents.database_registry import get_all_databases
 from agents.next_step_agent import NextStepAgent
 from agents.config import VERBOSE
+from agents import run_trace
 
 max_iters = 3
 
@@ -83,7 +84,11 @@ class SenseMaker:
         self.presentation_instructions = presentation_instructions
         self.memory = ''
         self.answer = ''
-        self.current_step = ""
+        # Records what happened during the run, for the dashboard and for
+        # anyone who wants to inspect a run afterwards. Purely additive: with
+        # nothing reading it the pipeline behaves exactly as before.
+        self.trace = run_trace.RunTrace()
+        self._current_step = ""
         self.understanding = ''
         self.action_plan = ''
         self.function_calls = []
@@ -98,7 +103,26 @@ class SenseMaker:
 
         self.action_plan_generator_agent = agents.action_plan_generation_agent.ActionPlanGenerationAgent()
 
+    @property
+    def current_step(self):
+        return self._current_step
+
+    @current_step.setter
+    def current_step(self, value):
+        """Assigning a step also records it.
+
+        Done as a property so each existing `self.current_step = ...` in the
+        pipeline logs a timestamped transition, with no restructuring and no
+        risk of an instrumentation call being forgotten.
+        """
+        self._current_step = value
+        self.trace.enter_stage(value)
+
     def make_sense(self, verbose=True):
+        # Hooks in local_model and the coding agent record into this trace.
+        # A ContextVar, so the coding agent's own asyncio loop sees it too.
+        run_trace.set_current(self.trace)
+
         # Print welcome message and supported databases
         print_welcome()
 
@@ -215,6 +239,8 @@ class SenseMaker:
                 database = [d.strip() for d in database]
                 self.information_request.append(f"{database}: {request}")
 
+                self.trace.db_query(databases=database, request=request)
+
                 if verbose:
                     print(f"🔍 Querying databases: {database}")
                     print(f"📝 Request: {request}")
@@ -311,6 +337,8 @@ class SenseMaker:
                 else:
                     self.answer = answer["response"]
 
+                self.trace.answer(text=self.answer)
+
                 print("\n" + "🎉" * 20 + " FINAL ANSWER " + "🎉" * 20)
                 print(self.answer)
                 print("🎉" * 50)
@@ -333,6 +361,10 @@ class SenseMaker:
                 retries += 1
                 if retries > max_retries:
                     print(f"Failed after {max_retries + 1} attempts: {str(e)}")
+                    self.trace.error(
+                        where=f"{type(agent).__name__}.{method}",
+                        message=f"failed after {max_retries + 1} attempts: {e}",
+                    )
                     return "FAILED"
 
 
@@ -348,6 +380,17 @@ if __name__ == "__main__":
     query = '''
     on nov 2 2020, for user1 how many text messages were sent and received, and how many hours were spent at home?
     '''
-    SenseMaker(
-        query,
-        presentation_instructions_).make_sense(verbose=VERBOSE)
+    sense_maker = SenseMaker(query, presentation_instructions_)
+    sense_maker.make_sense(verbose=VERBOSE)
+
+    # Optional: write the run trace, which records every stage, model call with
+    # its latency and token counts, the code the agent generated, the output of
+    # running it, and any errors.
+    #     python sensemaking_process.py --trace run.json
+    if "--trace" in sys.argv:
+        position = sys.argv.index("--trace")
+        path = sys.argv[position + 1] if len(sys.argv) > position + 1 else "run_trace.json"
+        with open(path, "w") as handle:
+            handle.write(sense_maker.trace.to_json())
+        print(f"\nTrace written to {path}")
+        print("Summary:", sense_maker.trace.summary())

@@ -27,6 +27,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
+from agents import run_trace
 from agents.config import (
     LOCAL_MODEL_API_KEY_ENV,
     LOCAL_MODEL_BASE_URL,
@@ -136,16 +137,32 @@ def chat(
     request_timeout = LOCAL_MODEL_TIMEOUT if timeout is None else timeout
     last_error = None
 
+    trace = run_trace.current()
+    prompt_chars = sum(len(m.get("content") or "") for m in messages)
+
     for attempt in range(1, _MAX_ATTEMPTS + 1):
+        started = time.monotonic()
         try:
-            return _stream_once(url, payload, request_timeout)
+            text, meta = _stream_once(url, payload, request_timeout)
+            trace.llm_call(
+                model=payload["model"],
+                seconds=time.monotonic() - started,
+                prompt_tokens=meta.get("prompt_eval_count"),
+                completion_tokens=meta.get("eval_count"),
+                worker=meta.get("worker"),
+                attempt=attempt,
+                chars=prompt_chars,
+            )
+            return text, meta
         except RuntimeError as exc:
             status = getattr(exc, "status_code", None)
             if status not in _RETRY_STATUS or attempt == _MAX_ATTEMPTS:
+                trace.error(where=f"model request (attempt {attempt})", message=exc)
                 raise
             last_error = exc
         except requests.exceptions.RequestException as exc:
             if attempt == _MAX_ATTEMPTS:
+                trace.error(where=f"model request (attempt {attempt})", message=exc)
                 raise RuntimeError(f"Could not reach {url}: {exc}") from exc
             last_error = exc
         time.sleep(2 * attempt)
