@@ -20,8 +20,16 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 
 [[ -f "$CREDS_FILE" ]] || { echo "ERROR: $CREDS_FILE not found" >&2; exit 1; }
 
-cp -p "$CREDS_FILE" "${CREDS_FILE}.${STAMP}.bak"
-echo "==> Previous credentials saved to ${CREDS_FILE}.${STAMP}.bak"
+# Deliberately OUTSIDE the repo: a credentials file inside a directory that
+# gets rsynced to participant checkouts is one careless exclude away from
+# handing everyone else's password to every participant.
+HISTORY_DIR="${BASE_DIR}/_credentials-history"
+mkdir -p "$HISTORY_DIR"
+chmod 700 "$HISTORY_DIR"
+BACKUP="${HISTORY_DIR}/participants-${STAMP}.txt"
+cp -p "$CREDS_FILE" "$BACKUP"
+chmod 600 "$BACKUP"
+echo "==> Previous credentials saved to ${BACKUP}"
 
 new_password() {
     # No pipeline: `tr < /dev/urandom | head -c N` makes head exit early, tr
@@ -58,7 +66,7 @@ while read -r -a fields; do
         echo "==> ${user}: no host account, recorded but not applied" >&2
     fi
     printf '%-6s %-7s %-8s %s\n' "$user" "$port" "$uiport" "$password" >> "$TMP"
-done < "${CREDS_FILE}.${STAMP}.bak"
+done < "$BACKUP"
 
 install -m 600 "$TMP" "$CREDS_FILE"
 rm -f "$TMP"

@@ -73,7 +73,7 @@ rsync -a --delete \
     --exclude '.git' \
     --exclude '__pycache__' \
     --exclude 'sample_data_old' \
-    --exclude 'deploy/participants.txt' \
+    --exclude 'deploy/participants.txt*' \
     --exclude 'code_generation.py' \
     --exclude 'code_generation.sh' \
     "${REPO_SRC}/" "${TEMPLATE}/"

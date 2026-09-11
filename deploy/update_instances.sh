@@ -41,7 +41,7 @@ EXCLUDES=(
     --exclude '__pycache__'
     --exclude '*.pyc'
     --exclude 'sample_data_old'
-    --exclude 'deploy/participants.txt'
+    --exclude 'deploy/participants.txt*'
     --exclude 'deploy/GLOSS-tutorial-logins.pdf'
     --exclude 'deploy/GLOSS-tutorial-logins.html'
     --exclude 'code_generation.py'
