@@ -365,6 +365,11 @@ def render_exchange(event):
     reflow or swallow. The ask here is fidelity, so the text is reproduced
     verbatim -- and st.code gives a copy button, which is what someone
     comparing a prompt against a reply actually wants.
+
+    wrap_lines is on because these are mostly prose: a model writes a paragraph
+    as one long line, and without wrapping reading it means scrolling sideways
+    through every paragraph. Wrapping is a display choice only -- the text, and
+    what the copy button yields, are unchanged.
     """
     messages = event.get("messages") or []
     reply = event.get("response")
@@ -383,20 +388,20 @@ def render_exchange(event):
         with st.expander(f"Exact prompt sent — {len(messages)} turn(s): {turns}"):
             for message in messages:
                 st.caption(f"**{(message.get('role') or 'user').upper()}**")
-                st.code(message.get("content") or "", language=None)
+                st.code(message.get("content") or "", language=None, wrap_lines=True)
 
     if reply is not None:
         # A preview inline, because the point of this tab is to see what each
         # agent said without a click per call; the full text is one click away.
         preview = reply if len(reply) <= 400 else reply[:400] + " …"
-        st.code(preview, language=None)
+        st.code(preview, language=None, wrap_lines=True)
         if len(reply) > 400:
             with st.expander(f"Exact reply in full — {len(reply):,} chars"):
-                st.code(reply, language=None)
+                st.code(reply, language=None, wrap_lines=True)
 
     if thinking:
         with st.expander(f"The model's reasoning — {len(thinking):,} chars"):
-            st.code(thinking, language=None)
+            st.code(thinking, language=None, wrap_lines=True)
 
 
 def render_activity(trace):
@@ -465,7 +470,7 @@ def render_code(trace):
         elif kind == "code_proposed":
             if event.get("has_code"):
                 st.markdown(f"**Generated code** (round {event.get('round_index')})")
-                st.code(event.get("code_block") or "", language="python")
+                st.code(event.get("code_block") or "", language="python", wrap_lines=True)
                 with st.expander("The agent's full message"):
                     st.markdown(event.get("code") or "")
             else:
@@ -473,7 +478,7 @@ def render_code(trace):
                 st.markdown(event.get("code") or "")
         else:
             st.markdown("**Output from running it**")
-            st.code(event.get("output") or "", language="text")
+            st.code(event.get("output") or "", language="text", wrap_lines=True)
         st.divider()
 
 
