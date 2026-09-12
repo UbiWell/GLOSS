@@ -631,12 +631,40 @@ def graph_steps(maker, trace):
     return steps
 
 
+# An icon per data stream, as the write-up's sensor panel has. Matched on a
+# keyword rather than the full name so a renamed or newly registered database
+# still gets one, falling back to a generic card index.
+DATABASE_ICONS = (
+    ("app", "📱"), ("call", "📞"), ("lock", "🔓"), ("unlock", "🔓"),
+    ("sms", "💬"), ("text", "💬"), ("sens", "📡"), ("location", "📍"),
+    ("step", "👣"), ("heart", "❤️"), ("audio", "🔊"), ("sound", "🔊"),
+    ("sleep", "🌙"), ("model", "🧠"),
+)
+
+
+def database_icon(name):
+    for keyword, icon in DATABASE_ICONS:
+        if keyword in name.lower():
+            return icon
+    return "🗃️"
+
+
 def database_names():
-    """The databases registered on this instance, for the panel."""
+    """The databases registered on this instance, labelled for the panel.
+
+    "app usage database" reads as "app usage" here: the panel is already
+    titled Databases, and the short form is what the write-up's sensor panel
+    uses.
+    """
     try:
-        return sorted(get_all_databases().keys())
+        names = sorted(get_all_databases().keys())
     except Exception:  # noqa: BLE001 - the panel is decoration, never fatal
         return []
+    labels = []
+    for name in names:
+        short = name.lower().replace(" database", "").strip() or name
+        labels.append(f"{database_icon(name)}  {short}")
+    return labels
 
 
 def agent_graph_chart(trace, active_node):
