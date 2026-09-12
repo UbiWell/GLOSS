@@ -109,6 +109,45 @@ class SenseMaker:
 
         self.action_plan_generator_agent = agents.action_plan_generation_agent.ActionPlanGenerationAgent()
 
+    def _record_field(self, name, value):
+        """Note a change to memory or understanding on the trace.
+
+        Guarded because __init__ sets memory before the trace exists, and
+        because instrumentation must never be the reason a run fails.
+        """
+        trace = getattr(self, "trace", None)
+        if trace is None:
+            return
+        try:
+            trace.memory_update(field=name, text=value,
+                                previous=getattr(self, f"_{name}", ""))
+        except Exception:  # pragma: no cover - instrumentation only
+            pass
+
+    @property
+    def memory(self):
+        return self._memory
+
+    @memory.setter
+    def memory(self, value):
+        """Assigning memory also records what was added.
+
+        A property for the same reason current_step is one: every existing
+        ``self.memory += ...`` in the pipeline then logs itself, with no call
+        site to update and none to forget.
+        """
+        self._record_field("memory", value)
+        self._memory = value
+
+    @property
+    def understanding(self):
+        return self._understanding
+
+    @understanding.setter
+    def understanding(self, value):
+        self._record_field("understanding", value)
+        self._understanding = value
+
     @property
     def current_step(self):
         return self._current_step

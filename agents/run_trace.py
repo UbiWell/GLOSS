@@ -42,6 +42,7 @@ LLM_CALL = "llm_call"            # one request to the language model
 CODE_PROPOSED = "code_proposed"  # the coding assistant wrote code
 CODE_OUTPUT = "code_output"      # the executor ran it and produced output
 DB_QUERY = "db_query"            # a data function was called
+MEMORY = "memory"                # memory or understanding changed
 ERROR = "error"                  # a step failed
 ANSWER = "answer"                # the final answer was produced
 
@@ -155,6 +156,28 @@ class RunTrace:
                  response=_clip(response),
                  thinking=_clip(thinking) or None)
 
+    def memory_update(self, *, field, text, previous=""):
+        """Record a change to memory or understanding.
+
+        Only the part that was added is stored, not the whole field: memory
+        grows by appending and reaches tens of kilobytes, so keeping every
+        version would be mostly duplication. Understanding is rewritten rather
+        than appended, so for it the "addition" is the whole new text, which is
+        what a reader wants to see anyway.
+        """
+        text, previous = text or "", previous or ""
+        if text == previous:
+            return
+
+        # Memory is appended to, so the delta is the interesting part. A new
+        # understanding replaces the old one wholesale, so show all of it --
+        # even when it happens to start with the previous text, where a delta
+        # would show a trailing fragment under a heading saying "rewritten".
+        appended = field == "memory" and text.startswith(previous)
+        added = text[len(previous):] if appended else text
+        self.add(MEMORY, field=field, added=_clip(added),
+                 total_chars=len(text), rewritten=not appended)
+
     def code_proposed(self, *, source, code, round_index=None):
         self.add(CODE_PROPOSED, source=source, code=code, round_index=round_index)
 
@@ -230,6 +253,7 @@ class NullTrace:
     def add(self, *a, **k): pass
     def finish(self, *a, **k): pass
     def enter_stage(self, *a, **k): pass
+    def memory_update(self, *a, **k): pass
     def llm_call(self, *a, **k): pass
     def code_proposed(self, *a, **k): pass
     def code_output(self, *a, **k): pass

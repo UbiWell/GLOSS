@@ -49,7 +49,7 @@ for key, value in {
     "query": EXAMPLE_QUERIES[0],
     "instructions": DEFAULT_INSTRUCTIONS,
     "run_active": False,
-    "graph_node": "query",
+    "graph_step": 0,
 }.items():
     st.session_state.setdefault(key, value)
 
@@ -117,7 +117,9 @@ TAB_NOTES = {
         "next-step agent, the information-seeking agent, the coding agent, and "
         "so on -- with the exact prompt that was sent and the exact reply that "
         "came back. Open 'Exact prompt sent' to read what an agent was actually "
-        "asked. Each entry also shows how long the model took, how many tokens "
+        "asked. Memory and understanding appear here too, at the moment they "
+        "change, so you can see what each step actually added. Each entry also "
+        "shows how long the model took, how many tokens "
         "went in and out, and which GPU worker served it. Prompts grow as "
         "memory accumulates, so later calls in a run are usually slower than "
         "earlier ones. Very long prompts are clipped in the middle; both ends "
@@ -137,23 +139,6 @@ TAB_NOTES = {
         "tab shows that loop: the request, the code, and the output. If the code "
         "fails, the agent sees the error and tries again -- you will see several "
         "rounds when that happens."
-    ),
-    "memory": (
-        "Memory is the record of each question GLOSS asked of the data and what "
-        "came back. Understanding is the running synthesis built from it, and is "
-        "what the final answer is written from. Watching these grow is the "
-        "clearest view of how the system reasons."
-    ),
-    "data": (
-        "Which databases were consulted, and with what request. With code "
-        "generation enabled, the data functions are usually called from inside "
-        "the generated code rather than directly, so the lower table is often "
-        "empty -- look at the Generated code tab instead."
-    ),
-    "trace": (
-        "The raw event log for this run. Every stage change, model call, piece of "
-        "generated code and error, in order. Download it to compare two runs, or "
-        "to see exactly where the time went."
     ),
 }
 
@@ -362,6 +347,21 @@ def render_overview(maker, trace):
         st.subheader("Understanding so far")
         st.markdown(maker.understanding)
 
+    # The tabs that used to hold these are gone; the text itself now appears in
+    # the timeline as it is written, but a whole-run copy is still worth having.
+    st.divider()
+    downloads = st.columns(3)
+    downloads[0].download_button(
+        "Memory (txt)", maker.memory or "", file_name="gloss_memory.txt",
+        disabled=not maker.memory, use_container_width=True)
+    downloads[1].download_button(
+        "Understanding (txt)", maker.understanding or "",
+        file_name="gloss_understanding.txt",
+        disabled=not maker.understanding, use_container_width=True)
+    downloads[2].download_button(
+        "Full trace (JSON)", trace.to_json(), file_name="gloss_trace.json",
+        mime="application/json", use_container_width=True)
+
 
 def stage_label(stage):
     """'INFORMATION SEEKING' -> 'information seeking', for secondary text."""
@@ -419,7 +419,7 @@ def render_activity(trace):
     """Chronological feed of what the agents did."""
     events = [
         e for e in trace.events()
-        if e["kind"] in ("llm_call", "db_query", "error", "answer")
+        if e["kind"] in ("llm_call", "db_query", "error", "answer", "memory")
     ]
     if not events:
         st.caption("No agent activity yet.")
@@ -452,6 +452,24 @@ def render_activity(trace):
                     (event.get("request") or "")
                     + f"  ·  during {stage_label(stage)}"
                 )
+        elif kind == "memory":
+            # Where the run's understanding actually changes, in line with the
+            # calls that caused it -- the point of a timeline.
+            field = event.get("field") or "memory"
+            with st.chat_message("assistant"):
+                if field == "understanding":
+                    st.markdown("**Understanding** rewritten")
+                    st.caption(
+                        f"now {event.get('total_chars', 0):,} characters · "
+                        f"during {stage_label(stage)}"
+                    )
+                else:
+                    st.markdown("**Memory** grew")
+                    st.caption(
+                        f"+{len(event.get('added') or ''):,} characters, now "
+                        f"{event.get('total_chars', 0):,} · during {stage_label(stage)}"
+                    )
+                st.code(event.get("added") or "", language=None, wrap_lines=True)
         elif kind == "answer":
             with st.chat_message("assistant"):
                 st.markdown("**Presentation agent** produced the final answer")
@@ -493,111 +511,51 @@ def render_code(trace):
         st.divider()
 
 
-def render_memory(maker):
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Memory")
-        st.caption("What the run has established so far, one question at a time.")
-        if maker.memory.strip():
-            st.text_area("memory", maker.memory, height=420,
-                         label_visibility="collapsed", disabled=True)
-            st.download_button("Download memory", maker.memory,
-                               file_name="gloss-memory.txt")
-        else:
-            st.caption("_empty_")
-    with right:
-        st.subheader("Understanding")
-        st.caption("The running synthesis that becomes the final answer.")
-        if maker.understanding.strip():
-            st.text_area("understanding", maker.understanding, height=420,
-                         label_visibility="collapsed", disabled=True)
-            st.download_button("Download understanding", maker.understanding,
-                               file_name="gloss-understanding.txt")
-        else:
-            st.caption("_empty_")
-
-
-def render_data(maker, trace):
-    st.subheader("Information requests")
-    requests = trace.events(kind="db_query")
-    if requests:
-        st.dataframe(
-            [{"databases": ", ".join(e.get("databases") or []),
-              "request": e.get("request")} for e in requests],
-            use_container_width=True, hide_index=True,
-        )
-    else:
-        st.caption("None yet.")
-
-    st.subheader("Data functions called")
-    calls = maker.function_calls
-    if calls:
-        rows = []
-        for call in calls:
-            if isinstance(call, dict):
-                rows.append({"function": call.get("name"),
-                             "params": json.dumps(call.get("params", {}), default=str)})
-            else:
-                rows.append({"function": str(call), "params": ""})
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-    else:
-        st.caption("None yet. With code generation on, GLOSS usually calls data "
-                   "functions from inside the generated code instead.")
-
-
-def render_trace(trace):
-    events = trace.events()
-    st.caption(
-        f"{len(events)} events. This is the raw record of the run — useful for "
-        "seeing exactly what happened, and for comparing two runs."
-    )
-    if events:
-        st.dataframe(
-            [{"seq": e["seq"], "at": f"{e['elapsed']:.1f}s",
-              "stage": e.get("stage"), "kind": e["kind"]} for e in events],
-            use_container_width=True, hide_index=True, height=420,
-        )
-        st.download_button("Download trace (JSON)", trace.to_json(),
-                           file_name="gloss-trace.json", mime="application/json")
-
-
 # --------------------------------------------------------------------------
 # Agent graph
 # --------------------------------------------------------------------------
 
-# The same picture as the GLOSS4HAR write-up, so the dashboard and the paper
-# agree. Coordinates are that diagram's own pixel space; the chart only scales
-# them, so moving a box here keeps the two in step.
-#
-# "agents" is how a node claims events from the trace. The local and global
-# sensemaking boxes are one agent module, told apart by the stage they run in,
-# which is why a node can match on stage as well.
+# Laid out and coloured to match the diagram in the GLOSS4HAR write-up, so the
+# dashboard and the paper show one picture. Coordinates and palette are that
+# diagram's own; its day palette is used for both Streamlit themes because
+# every box carries its own fill, so the boxes stay legible whatever the page
+# behind them is doing. Only the arrows are a neutral grey for that reason.
+PANEL, INK, LINE = "#FBFCFA", "#1B2428", "#DBE0D8"
+DBLUE, LBLUE, LBLUE_B = "#3E4E96", "#E7ECFA", "#6E86D8"
+ACCENT, ARROW = "#12786F", "#8C9BAB"
+
+# "agents" is how a node claims calls from the trace. Local and global
+# sensemaking are one agent module, told apart only by the stage they run in,
+# which is why a node can match on stage too.
 GRAPH_NODES = [
     {"id": "query", "label": "Query", "x": 26, "y": 56, "w": 124, "h": 100,
-     "kind": "io"},
+     "kind": "io", "symbol": "?"},
     {"id": "plan", "label": "Action Plan\nGeneration Agent", "x": 195, "y": 66,
-     "w": 190, "h": 68, "kind": "agent", "agents": ("Action-plan agent",)},
+     "w": 190, "h": 68, "style": "white", "agents": ("Action-plan agent",)},
     {"id": "next", "label": "Next Step\nAgent", "x": 520, "y": 66,
-     "w": 170, "h": 68, "kind": "agent", "agents": ("Next-step agent",)},
+     "w": 170, "h": 68, "style": "white", "agents": ("Next-step agent",)},
     {"id": "seek", "label": "Information\nSeeking Agent", "x": 912, "y": 69,
-     "w": 184, "h": 62, "kind": "agent", "agents": ("Information-seeking agent",)},
+     "w": 184, "h": 62, "style": "blue", "agents": ("Information-seeking agent",)},
     {"id": "dbm", "label": "Database / Model\nManager Agent", "x": 878, "y": 196,
-     "w": 178, "h": 70, "kind": "agent", "agents": ("Database manager", "Summarizer")},
+     "w": 178, "h": 70, "style": "blue", "agents": ("Database manager", "Summarizer")},
     {"id": "code", "label": "Code\nGeneration", "x": 1072, "y": 196,
-     "w": 116, "h": 70, "kind": "agent", "agents": ("Coding agent",)},
+     "w": 116, "h": 70, "style": "blue", "agents": ("Coding agent",)},
     {"id": "global", "label": "Global\nSensemaking Agent", "x": 500, "y": 246,
-     "w": 188, "h": 62, "kind": "agent", "agents": ("Sensemaking agent",),
+     "w": 188, "h": 62, "style": "lblue", "agents": ("Sensemaking agent",),
      "stages": ("GLOBAL SENSEMAKING",)},
     {"id": "local", "label": "Local\nSensemaking Agent", "x": 636, "y": 352,
-     "w": 188, "h": 70, "kind": "agent", "agents": ("Sensemaking agent",),
+     "w": 188, "h": 70, "style": "lblue", "agents": ("Sensemaking agent",),
      "stages": ("LOCAL SENSEMAKING",)},
     {"id": "present", "label": "Presentation\nAgent", "x": 195, "y": 356,
-     "w": 186, "h": 70, "kind": "agent", "agents": ("Presentation agent",)},
+     "w": 186, "h": 70, "style": "white", "agents": ("Presentation agent",)},
     {"id": "answer", "label": "Answer", "x": 26, "y": 350, "w": 124, "h": 100,
-     "kind": "io"},
+     "kind": "io", "symbol": "✓"},
+    # The write-up's sensor-streams panel. Here it lists the databases actually
+    # registered on this instance, since that is what the agents can reach.
+    {"id": "databases", "label": "Databases", "x": 870, "y": 452,
+     "w": 324, "h": 150, "kind": "panel"},
 ]
 
-# Elbow polylines, taken from the same diagram.
 GRAPH_EDGES = [
     [(150, 106), (191, 106)],
     [(385, 100), (516, 100)],
@@ -611,10 +569,27 @@ GRAPH_EDGES = [
     [(195, 391), (154, 391)],
 ]
 
+# The two dashed links from the data side down to the databases.
+GRAPH_DASHED = [
+    [(970, 266), (970, 452)],
+    [(1120, 266), (1120, 452)],
+]
+
+NODE_FILL = {"white": PANEL, "blue": DBLUE, "lblue": LBLUE,
+             "io": "#00000000", "panel": PANEL}
+NODE_STROKE = {"white": LINE, "blue": DBLUE, "lblue": LBLUE_B,
+               "io": "#00000000", "panel": LINE}
+NODE_TEXT = {"white": INK, "blue": "#FFFFFF", "lblue": INK,
+             "io": INK, "panel": INK}
+
+
+def node_style(node):
+    return node.get("style") or node.get("kind") or "white"
+
 
 def graph_calls(trace, node):
     """The model calls belonging to one node of the graph."""
-    if node["kind"] != "agent":
+    if not node.get("agents"):
         return []
     stages = node.get("stages")
     return [
@@ -624,188 +599,187 @@ def graph_calls(trace, node):
     ]
 
 
-def graph_frame(trace):
-    """One row per node, carrying what this run did in it."""
-    rows = []
+def node_for_event(event):
+    """Which box a model call belongs to, or None if the diagram has no box."""
     for node in GRAPH_NODES:
-        calls = graph_calls(trace, node)
-        seconds = sum(e.get("seconds") or 0 for e in calls)
-        if node["kind"] == "io":
-            status = "start/end"
-        elif calls:
-            status = "ran"
-        else:
-            status = "not used"
-        rows.append({
-            "id": node["id"],
-            "label": node["label"],
-            "x1": node["x"], "x2": node["x"] + node["w"],
-            "y1": node["y"], "y2": node["y"] + node["h"],
-            "cx": node["x"] + node["w"] / 2,
-            "cy": node["y"] + node["h"] / 2,
-            "calls": len(calls),
-            "seconds": round(seconds, 1),
-            "status": status,
-            "detail": (f"{len(calls)} call(s) · {seconds:.0f}s" if calls
-                       else ("click to see it" if node["kind"] == "io" else "not used in this run")),
-        })
-    return pd.DataFrame(rows)
+        if not node.get("agents"):
+            continue
+        if event.get("agent") in node["agents"]:
+            stages = node.get("stages")
+            if not stages or (event.get("stage") or "") in stages:
+                return node
+    return None
 
 
-def graph_edge_frame():
-    rows = []
-    for index, points in enumerate(GRAPH_EDGES):
-        for order, (x, y) in enumerate(points):
-            rows.append({"edge": index, "order": order, "x": x, "y": y})
-    return pd.DataFrame(rows)
+def graph_steps(maker, trace):
+    """The run as an ordered walk: the query, each model call, then the answer.
 
-
-def agent_graph_chart(trace, selected):
-    """The pipeline as a clickable diagram.
-
-    The layout is fixed rather than solved by a layout engine, so the boxes
-    stay where a reader last saw them instead of shuffling between runs.
-
-    The diagram is display-only. Streamlit 1.39 raises on any chart that both
-    composes layers and accepts selections, and a diagram needs layers: boxes,
-    elbow lines and labels are three different mark types. So the boxes below
-    do the selecting, named to match, with the chosen one outlined here.
+    One step per call rather than per agent, because an agent is visited more
+    than once -- the next-step agent runs every iteration -- and the point of
+    stepping is to follow the order things actually happened in.
     """
-    nodes = graph_frame(trace)
-    if selected:
-        nodes["chosen"] = nodes["id"].eq(selected)
-    else:
-        nodes["chosen"] = False
+    steps = [{"node": "query", "title": "Query", "event": None}]
+    for event in trace.events(kind="llm_call"):
+        node = node_for_event(event)
+        steps.append({
+            "node": node["id"] if node else None,
+            "title": event.get("agent") or "A model call",
+            "event": event,
+        })
+    if maker.answer:
+        steps.append({"node": "answer", "title": "Answer", "event": None})
+    return steps
+
+
+def database_names():
+    """The databases registered on this instance, for the panel."""
+    try:
+        return sorted(get_all_databases().keys())
+    except Exception:  # noqa: BLE001 - the panel is decoration, never fatal
+        return []
+
+
+def agent_graph_chart(trace, active_node):
+    """The pipeline, with the agent of the current step lit and the rest dimmed.
+
+    Display-only, and deliberately so: Streamlit 1.39 raises on any chart that
+    both composes layers and takes selections, and a diagram needs layers. The
+    stepper above it does the driving instead.
+    """
+    rows, labels = [], []
+    for node in GRAPH_NODES:
+        style = node_style(node)
+        lit = active_node is None or node["id"] == active_node
+        calls = len(graph_calls(trace, node))
+
+        if node.get("kind") == "io":
+            # A bubble with the symbol in it, and the word underneath.
+            size = 46
+            cx = node["x"] + node["w"] / 2
+            rows.append({"x1": cx - size / 2, "x2": cx + size / 2,
+                         "y1": node["y"] + 6, "y2": node["y"] + 6 + size,
+                         "fill": PANEL, "stroke": INK, "opacity": 1.0 if lit else 0.28,
+                         "width": 2.0, "id": node["id"], "label": node["label"],
+                         "detail": "the question" if node["id"] == "query" else "the answer"})
+            labels.append({"x": cx, "y": node["y"] + 6 + size / 2, "text": node["symbol"],
+                           "color": INK, "size": 22, "opacity": 1.0 if lit else 0.28})
+            labels.append({"x": cx, "y": node["y"] + 6 + size + 18, "text": node["label"],
+                           "color": INK, "size": 13, "opacity": 1.0 if lit else 0.28})
+            continue
+
+        text = node["label"]
+        if node.get("kind") == "panel":
+            names = database_names()
+            text = node["label"] + "\n" + ("\n".join(names) if names else "none registered")
+
+        rows.append({"x1": node["x"], "x2": node["x"] + node["w"],
+                     "y1": node["y"], "y2": node["y"] + node["h"],
+                     "fill": NODE_FILL[style], "stroke": ACCENT if (lit and active_node) else NODE_STROKE[style],
+                     "opacity": 1.0 if lit else 0.28,
+                     "width": 3.0 if (lit and active_node) else 1.0,
+                     "id": node["id"], "label": node["label"].replace("\n", " "),
+                     "detail": f"{calls} call(s) in this run" if calls else "not used in this run"})
+        labels.append({"x": node["x"] + node["w"] / 2,
+                       "y": node["y"] + node["h"] / 2,
+                       "text": text, "color": NODE_TEXT[style],
+                       "size": 11 if node.get("kind") == "panel" else 13,
+                       "opacity": 1.0 if lit else 0.28})
+
+    node_frame = pd.DataFrame(rows)
+    label_frame = pd.DataFrame(labels)
 
     x_scale = alt.Scale(domain=[0, 1220], nice=False)
-    # Reversed so the diagram reads top-down, the way it is drawn.
-    y_scale = alt.Scale(domain=[30, 470], nice=False, reverse=True)
-    no_axis = alt.Axis(labels=False, ticks=False, domain=False, grid=False, title=None)
+    y_scale = alt.Scale(domain=[30, 620], nice=False, reverse=True)
+    blank = alt.Axis(labels=False, ticks=False, domain=False, grid=False, title=None)
 
-    edges = alt.Chart(graph_edge_frame()).mark_line(
-        color="#8c9bab", strokeWidth=1.6, point=False,
-    ).encode(
-        x=alt.X("x:Q", scale=x_scale, axis=no_axis),
-        y=alt.Y("y:Q", scale=y_scale, axis=no_axis),
-        order="order:Q",
-        detail="edge:N",
-    )
+    def edge_layer(edges, dash):
+        points = []
+        for index, line in enumerate(edges):
+            for order, (x, y) in enumerate(line):
+                points.append({"edge": f"{dash}{index}", "order": order, "x": x, "y": y})
+        return alt.Chart(pd.DataFrame(points)).mark_line(
+            color=ARROW, strokeWidth=1.6,
+            strokeDash=[5, 4] if dash else [1, 0],
+        ).encode(
+            x=alt.X("x:Q", scale=x_scale, axis=blank),
+            y=alt.Y("y:Q", scale=y_scale, axis=blank),
+            order="order:Q", detail="edge:N",
+        )
 
-    boxes = alt.Chart(nodes).mark_rect(cornerRadius=6, strokeWidth=2).encode(
-        x=alt.X("x1:Q", scale=x_scale, axis=no_axis),
-        x2="x2:Q",
-        y=alt.Y("y1:Q", scale=y_scale, axis=no_axis),
-        y2="y2:Q",
-        # Mid-tones deliberately: they carry white text and sit legibly on
-        # both the light and the dark Streamlit background.
-        color=alt.Color("status:N", scale=alt.Scale(
-            domain=["ran", "not used", "start/end"],
-            range=["#2f6db5", "#6b7683", "#3c8f6b"]),
-            legend=alt.Legend(title=None, orient="top")),
-        stroke=alt.condition("datum.chosen", alt.value("#f0a202"), alt.value("#00000000")),
-        tooltip=[alt.Tooltip("label:N", title="Agent"),
+    boxes = alt.Chart(node_frame).mark_rect(cornerRadius=7).encode(
+        x=alt.X("x1:Q", scale=x_scale, axis=blank), x2="x2:Q",
+        y=alt.Y("y1:Q", scale=y_scale, axis=blank), y2="y2:Q",
+        fill=alt.Fill("fill:N", scale=None),
+        stroke=alt.Stroke("stroke:N", scale=None),
+        strokeWidth=alt.StrokeWidth("width:Q", scale=None),
+        opacity=alt.Opacity("opacity:Q", scale=None),
+        tooltip=[alt.Tooltip("label:N", title="Step"),
                  alt.Tooltip("detail:N", title="This run")],
     )
 
-    labels = alt.Chart(nodes).mark_text(
-        color="white", fontSize=12, fontWeight=600, lineBreak="\n",
+    text = alt.Chart(label_frame).mark_text(
+        lineBreak="\n", fontWeight=600, align="center", baseline="middle",
     ).encode(
-        x=alt.X("cx:Q", scale=x_scale, axis=no_axis),
-        y=alt.Y("cy:Q", scale=y_scale, axis=no_axis),
-        text="label:N",
+        x=alt.X("x:Q", scale=x_scale, axis=blank),
+        y=alt.Y("y:Q", scale=y_scale, axis=blank),
+        text="text:N",
+        color=alt.Color("color:N", scale=None),
+        size=alt.Size("size:Q", scale=None),
+        opacity=alt.Opacity("opacity:Q", scale=None),
     )
 
-    counts = alt.Chart(nodes[nodes["calls"] > 0]).mark_text(
-        color="white", fontSize=10, dy=24,
-    ).encode(
-        x=alt.X("cx:Q", scale=x_scale, axis=no_axis),
-        y=alt.Y("cy:Q", scale=y_scale, axis=no_axis),
-        text="detail:N",
-    )
-
-    return (edges + boxes + labels + counts).properties(height=420).configure_view(
-        stroke=None
-    )
+    return alt.layer(
+        edge_layer(GRAPH_EDGES, False), edge_layer(GRAPH_DASHED, True), boxes, text
+    ).properties(height=440).configure_view(stroke=None)
 
 
-def select_node(node_id):
-    st.session_state.graph_node = node_id
+def step_back():
+    st.session_state.graph_step = max(0, st.session_state.get("graph_step", 0) - 1)
+
+
+def step_forward(last):
+    st.session_state.graph_step = min(last, st.session_state.get("graph_step", 0) + 1)
 
 
 def render_graph(maker, trace):
-    """The pipeline diagram, and whatever the chosen box did."""
-    selected = st.session_state.get("graph_node") or "query"
-    trace_calls = {n["id"]: len(graph_calls(trace, n)) for n in GRAPH_NODES}
+    """Walk the run one step at a time, lighting the agent that was working."""
+    steps = graph_steps(maker, trace)
+    last = len(steps) - 1
+    index = min(st.session_state.get("graph_step", 0), last)
+    step = steps[index]
 
-    st.altair_chart(agent_graph_chart(trace, selected), use_container_width=True)
+    back, position, forward = st.columns([1, 3, 1])
+    back.button("◀ Previous", use_container_width=True, disabled=index == 0,
+                on_click=step_back, key="graph_prev")
+    position.markdown(
+        f"<div style='text-align:center;padding-top:6px'><b>Step {index + 1} of "
+        f"{len(steps)}</b> — {step['title']}</div>",
+        unsafe_allow_html=True,
+    )
+    forward.button("Next ▶", use_container_width=True, disabled=index == last,
+                   on_click=step_forward, args=(last,), key="graph_next")
 
-    # One button per box, in the rows the diagram uses, so picking an agent
-    # reads as picking it off the picture.
-    st.caption("Choose an agent to see exactly what it was sent and what it replied")
-    rows = [["query", "plan", "next", "seek"],
-            ["dbm", "code"],
-            ["global", "local"],
-            ["present", "answer"]]
-    titles = {n["id"]: n["label"].replace("\n", " ") for n in GRAPH_NODES}
-    for row in rows:
-        columns = st.columns(len(row))
-        for column, node_id in zip(columns, row):
-            calls = trace_calls.get(node_id, 0)
-            label = titles[node_id] + (f"  ({calls})" if calls else "")
-            column.button(
-                label,
-                key=f"graph_pick_{node_id}",
-                use_container_width=True,
-                type="primary" if node_id == selected else "secondary",
-                on_click=select_node,
-                args=(node_id,),
-            )
+    st.altair_chart(agent_graph_chart(trace, step["node"]), use_container_width=True)
 
-    node = next((n for n in GRAPH_NODES if n["id"] == selected), GRAPH_NODES[0])
-    st.divider()
-    st.subheader(titles[node["id"]])
-
-    if node["id"] == "query":
-        st.caption("What this run was asked.")
+    event = step["event"]
+    if step["node"] == "query":
+        st.subheader("The question")
         st.code(maker.user_query or "", language=None, wrap_lines=True)
         return
-    if node["id"] == "answer":
-        st.caption("What it answered.")
-        if maker.answer:
-            st.code(maker.answer, language=None, wrap_lines=True)
-        else:
-            st.info("No answer yet.")
+    if step["node"] == "answer":
+        st.subheader("The answer")
+        st.code(maker.answer, language=None, wrap_lines=True)
         return
 
-    calls = graph_calls(trace, node)
-    if not calls:
-        st.info(
-            "This agent has not run in this query. Not every run uses every "
-            "agent -- the next-step agent decides which are needed."
-        )
-        return
-
-    total = sum(e.get("seconds") or 0 for e in calls)
-    st.caption(f"{len(calls)} model call(s) · {total:.0f}s in total")
-    for index, event in enumerate(calls, start=1):
-        with st.container(border=True):
-            st.markdown(
-                f"**Call {index} of {len(calls)}** · during {stage_label(event.get('stage'))}"
-            )
-            st.caption(
-                f"{event['seconds']:.1f}s · "
-                f"{event.get('prompt_tokens') or 0} in / "
-                f"{event.get('completion_tokens') or 0} out tokens"
-                f" · worker {event.get('worker') or 'unknown'}"
-            )
-            render_exchange(event)
-
-    # An agent with no box would silently vanish from this view, so say so.
-    known = {a for n in GRAPH_NODES if n["kind"] == "agent" for a in n["agents"]}
-    seen = {e.get("agent") for e in trace.events(kind="llm_call") if e.get("agent")}
-    missing = sorted(a for a in seen - known if a)
-    if missing:
-        st.caption(f"Not shown in the diagram: {', '.join(missing)}.")
+    st.subheader(step["title"])
+    st.caption(
+        f"during {stage_label(event.get('stage'))} · {event['seconds']:.1f}s · "
+        f"{event.get('prompt_tokens') or 0} in / {event.get('completion_tokens') or 0} out tokens"
+        f" · worker {event.get('worker') or 'unknown'}"
+    )
+    if step["node"] is None:
+        st.caption("This agent has no box in the diagram.")
+    render_exchange(event)
 
 
 # --------------------------------------------------------------------------
@@ -857,9 +831,8 @@ def live_area():
     else:
         st.success("Finished", icon="✅")
 
-    overview, graph, activity, code, memory, data, raw = st.tabs(
-        ["Overview", "Agent graph", "Agent activity", "Generated code",
-         "Memory", "Data", "Trace"]
+    overview, graph, activity, code = st.tabs(
+        ["Overview", "Agent graph", "Agent activity", "Generated code"]
     )
     with overview:
         explain("overview")
@@ -873,15 +846,6 @@ def live_area():
     with code:
         explain("code")
         render_code(trace)
-    with memory:
-        explain("memory")
-        render_memory(maker)
-    with data:
-        explain("data")
-        render_data(maker, trace)
-    with raw:
-        explain("trace")
-        render_trace(trace)
 
 
 live_area()
