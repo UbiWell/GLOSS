@@ -430,7 +430,7 @@ def render_activity(trace):
         stage = event.get("stage") or "—"
 
         if kind == "llm_call":
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar="🤖"):
                 tokens = f"{event.get('prompt_tokens') or 0} in / {event.get('completion_tokens') or 0} out"
                 # The agent's name, not the stage: several agents run inside
                 # one stage, and a stage name does not tell a participant who
@@ -443,7 +443,7 @@ def render_activity(trace):
                 )
                 render_exchange(event)
         elif kind == "db_query":
-            with st.chat_message("user"):
+            with st.chat_message("user", avatar="🗃️"):
                 st.markdown(
                     f"**Database manager** queried "
                     f"{', '.join(event.get('databases') or []) or 'the data'}"
@@ -456,7 +456,10 @@ def render_activity(trace):
             # Where the run's understanding actually changes, in line with the
             # calls that caused it -- the point of a timeline.
             field = event.get("field") or "memory"
-            with st.chat_message("assistant"):
+            # Memory and understanding are not an agent speaking, so they do
+            # not wear an agent's face.
+            avatar = "💡" if field == "understanding" else "📝"
+            with st.chat_message("assistant", avatar=avatar):
                 if field == "understanding":
                     st.markdown("**Understanding** rewritten")
                     st.caption(
@@ -471,10 +474,10 @@ def render_activity(trace):
                     )
                 st.code(event.get("added") or "", language=None, wrap_lines=True)
         elif kind == "answer":
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar="✅"):
                 st.markdown("**Presentation agent** produced the final answer")
         else:
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar="⚠️"):
                 st.error(f"{event.get('where')}: {event.get('message')}")
 
 
