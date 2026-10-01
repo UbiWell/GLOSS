@@ -2,16 +2,35 @@
 """
 Record the tutorial's example queries so they can be replayed without a model.
 
-Run this on the SERVER, with the gateway working, before the session. Each
-query is run for real and the whole run -- stages, generated code, model
+Each query is run for real and the whole run -- stages, generated code, model
 latencies, answer -- is written to ``offline_runs/``. The dashboard's Offline
 mode then replays them, so a slow or dead gateway cannot derail the examples in
 front of a room.
 
-    python3 deploy/record_offline_runs.py              # record everything missing
-    python3 deploy/record_offline_runs.py --list       # what is recorded already
-    python3 deploy/record_offline_runs.py --force      # re-record everything
-    python3 deploy/record_offline_runs.py --only sleep # just matching questions
+Run it INSIDE A CONTAINER, not on the host. The host has no Python environment:
+provision.sh installs only Docker, and GLOSS's dependencies live at
+/opt/conda/envs/gloss-sensemaking inside the images. Running it on the host
+fails with ModuleNotFoundError: No module named 'langchain_openai'.
+
+    docker exec -u p10 -w /srv/gloss/p10 gloss-p10 \
+        bash -lc 'python deploy/record_offline_runs.py'
+
+``bash -lc`` matters: a login shell is what picks up GATEWAY_API_KEY and the
+conda environment from /etc/profile.d/10-gloss-env.sh. Pick any spare instance.
+
+Recordings land in /srv/gloss/p10/offline_runs/, which is bind-mounted, so they
+appear on the host at that same path. Copy them into the source checkout and
+distribute:
+
+    mkdir -p ~/gloss-repo/offline_runs
+    sudo cp /srv/gloss/p10/offline_runs/*.json ~/gloss-repo/offline_runs/
+    sudo bash deploy/update_instances.sh --apply
+
+Other options, all via the same docker exec:
+
+    --list        what is recorded already (works anywhere; imports nothing)
+    --force       re-record even where a recording exists for this state
+    --only sleep  just the questions matching this text
 
 Two of these questions have different right answers before and after the
 tutorial's demos:
@@ -26,10 +45,13 @@ replay prefers the recording matching the current state. So record these twice:
 once as shipped, then again after uncommenting the two demos -- and remember to
 put the files back afterwards.
 
-    python3 deploy/record_offline_runs.py                   # before state
+    <record>                                    # the shipped state
     # ... uncomment both demos, per TUTORIAL.md ...
-    python3 deploy/record_offline_runs.py                   # after state
-    git checkout data_streams/                              # back to the demo state
+    <record>                                    # the registered state
+    git checkout data_streams/                  # back to the demo state
+
+Uncomment in the instance you are recording from, since that is where the
+fingerprint is read.
 
 Recording every query takes a while: these are real runs.
 """

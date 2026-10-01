@@ -368,31 +368,41 @@ having a bad afternoon in front of a room.
 
 ## Recording, before the session
 
-On the server, with the gateway working:
+Run the recorder **inside a container**, not on the host. The host has no
+Python environment — `provision.sh` installs only Docker, and GLOSS's
+dependencies live inside the images. On the host it fails with
+`ModuleNotFoundError: No module named 'langchain_openai'`.
 
 ```bash
-cd ~/gloss-repo
-python3 deploy/record_offline_runs.py          # real runs; takes a while
-python3 deploy/record_offline_runs.py --list   # check what landed
+docker exec -u p10 -w /srv/gloss/p10 gloss-p10 \
+    bash -lc 'python deploy/record_offline_runs.py'
 ```
 
+`bash -lc` matters: a login shell is what picks up `GATEWAY_API_KEY` and the
+conda environment. Use any spare instance. These are real runs, so it takes a
+while.
+
 The two demo queries have **different right answers before and after** their
-demo, so record them twice:
+demo, so record them twice — uncommenting inside the instance you are
+recording from, since that is where the state is read:
 
 ```bash
-python3 deploy/record_offline_runs.py          # the shipped state
-# ... uncomment both demos, per the sections above ...
-python3 deploy/record_offline_runs.py          # the registered state
-git checkout data_streams/                     # back to the demo state
+# 1. record the shipped state (command above)
+# 2. uncomment both demos in /srv/gloss/p10, per the sections above
+# 3. record again
+# 4. git checkout data_streams/   in that instance, back to the demo state
 ```
 
 Each recording stores a fingerprint of what was registered when it ran, and
 replay picks the one matching the instance's current state. So the before/after
 demos work offline too, and still show the difference.
 
-Then distribute:
+Then collect and distribute. `/srv/gloss/p10` is bind-mounted, so the
+recordings are already on the host at that path:
 
 ```bash
+mkdir -p ~/gloss-repo/offline_runs
+sudo cp /srv/gloss/p10/offline_runs/*.json ~/gloss-repo/offline_runs/
 sudo bash deploy/update_instances.sh --apply
 ```
 
@@ -413,6 +423,7 @@ pause, and every tab fills in as it would during a real run. Stop works.
 
 | Problem | Fix |
 |---|---|
+| `ModuleNotFoundError: langchain_openai` | The recorder was run on the host; run it inside a container with `docker exec` |
 | "No recorded runs found" | Recordings have not reached that instance — run `update_instances.sh --apply` |
 | A demo query replays the wrong answer | It was recorded in only one state; record it again in the other |
 | Want a different replay speed | `TARGET_SECONDS` in `agents/offline_runs.py` |
