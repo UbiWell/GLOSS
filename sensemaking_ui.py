@@ -21,6 +21,7 @@ newer than that are used.
 """
 
 import json
+import re
 import threading
 import time
 
@@ -284,13 +285,24 @@ with st.sidebar:
             st.button("Running…", disabled=True, use_container_width=True)
             st.button("Stop", on_click=stop_run, use_container_width=True)
         else:
+            # Both boxes are required. How an answer should be presented is
+            # half of what this tutorial is about, and leaving it blank to be
+            # quietly defaulted teaches that it does not matter.
+            missing = []
+            if not st.session_state.query.strip():
+                missing.append("a question")
+            if not st.session_state.instructions.strip():
+                missing.append("presentation instructions")
+
             st.button(
                 "Run",
                 type="primary",
                 use_container_width=True,
-                disabled=not st.session_state.query.strip(),
+                disabled=bool(missing),
                 on_click=lambda: start_run(st.session_state.query, st.session_state.instructions),
             )
+            if missing:
+                st.caption(f"Enter {' and '.join(missing)} to run.")
 
         st.divider()
         st.caption("Examples — click to load one")
@@ -450,6 +462,33 @@ def stage_label(stage):
     return (stage or "").replace("_", " ").lower() or "unknown stage"
 
 
+# Models return their JSON wrapped in a markdown fence, and as one long line.
+# Both are noise: the fence says nothing a reader needs, and a single line of
+# JSON is unreadable at any width.
+_JSON_FENCE = re.compile(r"^```(?:json)?\s*\n(.*?)```$", re.DOTALL)
+
+
+def _as_pretty_json(text):
+    """`text` re-rendered as indented JSON, or None if it is not JSON.
+
+    Handles both the fenced form and bare JSON, and returns None on anything
+    it cannot parse, so a reply that merely begins with a brace is never
+    mangled into something it is not.
+    """
+    if not text:
+        return None
+    candidate = text.strip()
+    fenced = _JSON_FENCE.match(candidate)
+    if fenced:
+        candidate = fenced.group(1).strip()
+    if not candidate.startswith(("{", "[")):
+        return None
+    try:
+        return json.dumps(json.loads(candidate), indent=2, ensure_ascii=False)
+    except ValueError:
+        return None
+
+
 def render_exchange(event):
     """The exact prompt sent and the exact reply received, for one model call.
 
@@ -484,13 +523,25 @@ def render_exchange(event):
                 st.code(message.get("content") or "", language=None, wrap_lines=True)
 
     if reply is not None:
-        # A preview inline, because the point of this tab is to see what each
-        # agent said without a click per call; the full text is one click away.
-        preview = reply if len(reply) <= 400 else reply[:400] + " …"
-        st.code(preview, language=None, wrap_lines=True)
-        if len(reply) > 400:
-            with st.expander(f"Exact reply in full — {len(reply):,} chars"):
+        pretty = _as_pretty_json(reply)
+        if pretty is not None:
+            # Indented and syntax-highlighted, with the fence gone. Shown at a
+            # higher limit than prose: cutting a structure at 400 characters
+            # loses the shape, which is the thing worth seeing.
+            preview = pretty if len(pretty) <= 1500 else pretty[:1500] + "\n  …"
+            st.code(preview, language="json", wrap_lines=True)
+            # Fidelity still matters here, so the untouched reply stays one
+            # click away -- reformatted is not the same as received.
+            with st.expander(f"Exact reply as received — {len(reply):,} chars"):
                 st.code(reply, language=None, wrap_lines=True)
+        else:
+            # A preview inline, because the point of this tab is to see what each
+            # agent said without a click per call; the full text is one click away.
+            preview = reply if len(reply) <= 400 else reply[:400] + " …"
+            st.code(preview, language=None, wrap_lines=True)
+            if len(reply) > 400:
+                with st.expander(f"Exact reply in full — {len(reply):,} chars"):
+                    st.code(reply, language=None, wrap_lines=True)
 
     if thinking:
         with st.expander(f"The model's reasoning — {len(thinking):,} chars"):

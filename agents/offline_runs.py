@@ -217,6 +217,7 @@ class ReplayRun:
         self.memory = ""
         self.action_plan = ""
         self.offline = True
+        self._seen_planning = False
 
     def make_sense(self, verbose=False):
         """Emit the recorded events on the original rhythm, compressed."""
@@ -257,6 +258,21 @@ class ReplayRun:
 
         if kind == run_trace.STAGE:
             name = event.get("name") or ""
+
+            # The pipeline never records the action plan on the trace -- the
+            # dashboard reads it off the run object -- so replay has only the
+            # recorded final value and no event telling it when to show it.
+            # It is written once, during the planning stage, and never
+            # changed, so revealing it as that stage ends is faithful. Without
+            # this it stayed blank until the whole replay finished, with the
+            # timeline claiming planning was long done.
+            if self._seen_planning and not self.action_plan:
+                self.action_plan = (self.recording.get("final") or {}).get(
+                    "action_plan", ""
+                )
+            if "ACTION PLAN" in name.upper():
+                self._seen_planning = True
+
             self.current_step = name
             self.trace.enter_stage(name)
             return
