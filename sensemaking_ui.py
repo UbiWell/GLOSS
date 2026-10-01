@@ -31,6 +31,7 @@ import streamlit as st
 import sensemaking_process
 from agents.config import LOCAL_MODEL_NAME, USE_LOCAL_MODEL
 from agents.database_registry import get_all_databases, get_pending_databases
+from agents import offline_runs
 
 st.set_page_config(page_title="GLOSS", page_icon="🔍", layout="wide")
 
@@ -50,6 +51,8 @@ for key, value in {
     "instructions": DEFAULT_INSTRUCTIONS,
     "run_active": False,
     "graph_step": 0,
+    "offline_mode": False,
+    "offline_choice": 0,
 }.items():
     st.session_state.setdefault(key, value)
 
@@ -88,6 +91,31 @@ def start_run(query, instructions):
 
     # Watched by live_area so it can hand the controls back the moment the
     # thread exits, without the participant having to press Stop first.
+    st.session_state.run_active = True
+    worker = threading.Thread(target=work, daemon=True)
+    st.session_state.worker = worker
+    worker.start()
+
+
+def start_replay(recording):
+    """Play a recorded run. Same surface as start_run, same worker shape.
+
+    ReplayRun stands in for SenseMaker, so nothing downstream -- the tabs, the
+    timeline, the agent graph -- needs to know this is not a live run.
+    """
+    maker = offline_runs.ReplayRun(recording)
+    st.session_state.sense_maker = maker
+
+    def work():
+        try:
+            maker.make_sense(verbose=False)
+        except Exception as exc:  # noqa: BLE001 - surfaced in the UI
+            maker.trace.error(where="replay", message=exc)
+            maker.answer = f"The replay failed: {exc}"
+            maker.current_step = "FINISH"
+        finally:
+            maker.trace.finish()
+
     st.session_state.run_active = True
     worker = threading.Thread(target=work, daemon=True)
     st.session_state.worker = worker
@@ -193,41 +221,87 @@ def diagnose(message):
 with st.sidebar:
     st.subheader("Ask a question")
 
-    st.session_state.query = st.text_area(
-        "Question",
-        value=st.session_state.query,
-        height=110,
+    # Recorded runs, replayed from disk. The point is a tutorial whose example
+    # queries do not depend on a gateway being up and quick in front of a room.
+    st.session_state.offline_mode = st.toggle(
+        "Offline mode",
+        value=st.session_state.offline_mode,
         disabled=is_running(),
-        help="The user id in the sample data is always user1.",
-    )
-    st.session_state.instructions = st.text_input(
-        "How should the answer be presented?",
-        value=st.session_state.instructions,
-        disabled=is_running(),
+        help="Replay recorded runs instead of calling the model. Only the "
+             "recorded questions are available while this is on.",
     )
 
-    if is_running():
-        st.button("Running…", disabled=True, use_container_width=True)
-        st.button("Stop", on_click=stop_run, use_container_width=True)
+    if st.session_state.offline_mode:
+        recordings = offline_runs.available_runs()
+        if not recordings:
+            st.warning(
+                "No recorded runs found. Run `deploy/record_offline_runs.py` "
+                "on the server, or switch offline mode off.",
+                icon="⚠️",
+            )
+        else:
+            index = min(st.session_state.offline_choice, len(recordings) - 1)
+            chosen = st.selectbox(
+                "Recorded question",
+                options=range(len(recordings)),
+                index=index,
+                format_func=lambda i: recordings[i].get("label") or recordings[i]["query"],
+                disabled=is_running(),
+            )
+            st.session_state.offline_choice = chosen
+            recording = recordings[chosen]
+
+            st.caption(recording["query"])
+            if recording.get("instructions"):
+                st.caption(f"Presented as: *{recording['instructions']}*")
+
+            if is_running():
+                st.button("Running…", disabled=True, use_container_width=True)
+                st.button("Stop", on_click=stop_run, use_container_width=True)
+            else:
+                st.button(
+                    "Run",
+                    type="primary",
+                    use_container_width=True,
+                    on_click=lambda r=recording: start_replay(r),
+                )
+            st.caption("Replaying a recorded run — the model is not called.")
     else:
-        st.button(
-            "Run",
-            type="primary",
-            use_container_width=True,
-            disabled=not st.session_state.query.strip(),
-            on_click=lambda: start_run(st.session_state.query, st.session_state.instructions),
+        st.session_state.query = st.text_area(
+            "Question",
+            value=st.session_state.query,
+            height=110,
+            disabled=is_running(),
+            help="The user id in the sample data is always user1.",
+        )
+        st.session_state.instructions = st.text_input(
+            "How should the answer be presented?",
+            value=st.session_state.instructions,
+            disabled=is_running(),
         )
 
-    st.divider()
-    st.caption("Examples — click to load one")
-    for index, example in enumerate(EXAMPLE_QUERIES):
-        st.button(
-            example,
-            key=f"example_{index}",
-            disabled=is_running(),
-            use_container_width=True,
-            on_click=lambda e=example: st.session_state.update(query=e),
-        )
+        if is_running():
+            st.button("Running…", disabled=True, use_container_width=True)
+            st.button("Stop", on_click=stop_run, use_container_width=True)
+        else:
+            st.button(
+                "Run",
+                type="primary",
+                use_container_width=True,
+                disabled=not st.session_state.query.strip(),
+                on_click=lambda: start_run(st.session_state.query, st.session_state.instructions),
+            )
+
+        st.divider()
+        st.caption("Examples — click to load one")
+        for index, example in enumerate(EXAMPLE_QUERIES):
+            st.button(
+                example,
+                key=f"example_{index}",
+                disabled=is_running(),
+                use_container_width=True,
+                on_click=lambda e=example: st.session_state.update(query=e),
+            )
 
     st.divider()
 
@@ -514,7 +588,9 @@ def render_code(trace):
                 with st.expander("The agent's full message"):
                     st.markdown(event.get("code") or "")
             else:
-                st.markdown(f"**The agent said** (round {event.get('round_index')})")
+                # No round number: a turn without code is not a round, and an
+                # opening plan would otherwise be labelled "round 0".
+                st.markdown("**The agent said**")
                 st.markdown(event.get("code") or "")
         else:
             st.markdown("**Output from running it**")

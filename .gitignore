@@ -51,3 +51,8 @@ deploy/GLOSS-tutorial-logins.pdf
 deploy/GLOSS-tutorial-logins.html
 deploy/GLOSS-tutorial-maintenance.html
 deploy/participants.txt.*.bak
+
+# Recorded runs for the dashboard's offline mode. Generated on the server by
+# deploy/record_offline_runs.py and distributed by update_instances.sh, which
+# rsyncs the checkout -- so they reach participants without being committed.
+offline_runs/

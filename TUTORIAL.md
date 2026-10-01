@@ -347,7 +347,7 @@ name, and can be argued with.
 
 ---
 
-## If something goes wrong
+## If something goes wrong — the demos
 
 | Problem | Fix |
 |---|---|
@@ -357,3 +357,62 @@ name, and can be argued with.
 | Agent still writes its own grouping code | The `"SMS4"` metadata entry is what it reads — check that one, not `function_refs` |
 | Start over (demo 1) | `git checkout data_streams/sensing_behavior_database.py` |
 | Start over (demo 2) | `git checkout data_streams/sms_data.py data_streams/sms_database.py` |
+
+---
+
+# Offline mode
+
+The dashboard can replay recorded runs instead of calling the model. The
+example queries then work regardless of whether the gateway is up, fast, or
+having a bad afternoon in front of a room.
+
+## Recording, before the session
+
+On the server, with the gateway working:
+
+```bash
+cd ~/gloss-repo
+python3 deploy/record_offline_runs.py          # real runs; takes a while
+python3 deploy/record_offline_runs.py --list   # check what landed
+```
+
+The two demo queries have **different right answers before and after** their
+demo, so record them twice:
+
+```bash
+python3 deploy/record_offline_runs.py          # the shipped state
+# ... uncomment both demos, per the sections above ...
+python3 deploy/record_offline_runs.py          # the registered state
+git checkout data_streams/                     # back to the demo state
+```
+
+Each recording stores a fingerprint of what was registered when it ran, and
+replay picks the one matching the instance's current state. So the before/after
+demos work offline too, and still show the difference.
+
+Then distribute:
+
+```bash
+sudo bash deploy/update_instances.sh --apply
+```
+
+Recordings are not committed to git — they are deployment artifacts, and
+`update_instances.sh` rsyncs them to every instance anyway.
+
+## Using it
+
+**Offline mode** is a toggle at the top of the sidebar, off by default. Turn it
+on and the question box is replaced by a dropdown of the recorded questions:
+only those can be run, and nothing reaches the model.
+
+A replay takes about 25 seconds. It is deliberately not instant — it keeps the
+original run's shape, so the long pause in code generation is still the longest
+pause, and every tab fills in as it would during a real run. Stop works.
+
+## If something goes wrong — offline mode
+
+| Problem | Fix |
+|---|---|
+| "No recorded runs found" | Recordings have not reached that instance — run `update_instances.sh --apply` |
+| A demo query replays the wrong answer | It was recorded in only one state; record it again in the other |
+| Want a different replay speed | `TARGET_SECONDS` in `agents/offline_runs.py` |

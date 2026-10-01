@@ -146,8 +146,14 @@ def _record_coding_conversation(messages, user_query):
                 # The task the coding agent was asked to carry out.
                 trace.add("code_task", source=source, request=content)
             else:
-                round_index += 1
                 block = _extract_code_block(content)
+                # A round is a piece of code, not a turn. The agent's plan and
+                # its closing summary are turns without code, and numbering
+                # them as rounds made the conversation look like it had been
+                # through more attempts than it had. They now carry the number
+                # of the round they belong to.
+                if block is not None:
+                    round_index += 1
                 trace.add(
                     run_trace.CODE_PROPOSED,
                     source=source,

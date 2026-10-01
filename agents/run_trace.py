@@ -178,8 +178,15 @@ class RunTrace:
         self.add(MEMORY, field=field, added=_clip(added),
                  total_chars=len(text), rewritten=not appended)
 
-    def code_proposed(self, *, source, code, round_index=None):
-        self.add(CODE_PROPOSED, source=source, code=code, round_index=round_index)
+    def code_proposed(self, *, source, code, round_index=None, has_code=True):
+        """Record an assistant turn from the coding agent.
+
+        ``has_code`` separates a turn that wrote code from one that only talked
+        -- a plan, or the closing summary. Both are worth showing; only the
+        first counts as a code round.
+        """
+        self.add(CODE_PROPOSED, source=source, code=code,
+                 round_index=round_index, has_code=has_code)
 
     def code_output(self, *, source, output, round_index=None):
         self.add(CODE_OUTPUT, source=source, output=output, round_index=round_index)
@@ -228,7 +235,13 @@ class RunTrace:
             "llm_seconds": round(sum(e.get("seconds") or 0 for e in calls), 1),
             "prompt_tokens": sum(e.get("prompt_tokens") or 0 for e in calls),
             "completion_tokens": sum(e.get("completion_tokens") or 0 for e in calls),
-            "code_rounds": sum(1 for e in events if e["kind"] == CODE_PROPOSED),
+            # Only turns that actually carried code. A CODE_PROPOSED event is
+            # recorded for every assistant turn, and the coding agent always
+            # ends with a code-free summary, so counting them all reported one
+            # more code round than was ever written. Absent flag counts as code:
+            # undercounting real work is worse than the occasional overcount.
+            "code_rounds": sum(1 for e in events
+                               if e["kind"] == CODE_PROPOSED and e.get("has_code", True)),
             "db_queries": sum(1 for e in events if e["kind"] == DB_QUERY),
             "errors": sum(1 for e in events if e["kind"] == ERROR),
         }
