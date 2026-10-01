@@ -72,6 +72,35 @@ functions = {
         "returns": "A list of per-contact message counts and character totals, ordered by total messages descending.",
         "example": "[{'contact': 'f75c2b42...', 'total_messages': 8, 'messages_incoming': 5, 'messages_outgoing': 3, 'total_characters': 402}]"
     },
+
+    # ---------------------------------------------------------------------
+    # TUTORIAL DEMO: UNCOMMENT TO GIVE THE AGENT THE CONVERSATION HELPER
+    #
+    # get_sms_conversation_blocks() below is written and working. It is left
+    # out of this dictionary on purpose, and this dictionary is the whole of
+    # what the model knows: a function missing from it does not exist as far
+    # as the agent is concerned, so asked to count conversations it writes its
+    # own grouping code and invents a gap threshold. Different runs invent
+    # different thresholds and report different numbers.
+    #
+    # Uncommenting this entry, and the matching one in sms_database.py, is all
+    # it takes for the agent to call the helper instead and for everyone to
+    # get the same answer.
+    # ---------------------------------------------------------------------
+
+    # "SMS4": {
+    #     "name": "get_sms_conversation_blocks",
+    #     "usecase": ["function_calling", "code_generation"],
+    #     "description": "Groups text messages into conversations: runs of messages with the same contact where consecutive messages are no more than gap_minutes apart. Use this for any question about conversations, exchanges or back-and-forths, rather than grouping messages by hand -- the gap that separates two conversations is a judgement call, and this function fixes it so the same question always gives the same answer.",
+    #     "params": {
+    #         "uid": {"type": "str", "description": "The unique identifier for the user."},
+    #         "start_time": {"type": "str", "description": "The start of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
+    #         "end_time": {"type": "str", "description": "The end of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
+    #         "gap_minutes": {"type": "int", "description": "Silence that ends a conversation, in minutes. Optional; leave it out to use the documented default of 30 minutes, which is what makes repeated runs agree. Pass a value only when the question explicitly asks for a different threshold."}
+    #     },
+    #     "returns": "A list of conversations ordered by start time, each with the contact, start and end time, duration in minutes, message counts by direction, and the gap_minutes used. The number of conversations is the length of this list.",
+    #     "example": "[{'contact': 'f75c2b42...', 'start_time': '2019-10-06 09:14:02', 'end_time': '2019-10-06 09:41:55', 'duration_minutes': 27.9, 'total_messages': 6, 'messages_outgoing': 2, 'messages_incoming': 4, 'gap_minutes': 30}]"
+    # },
 }
 
 
@@ -166,6 +195,62 @@ def get_sms_contact_breakdown(uid, start_time, end_time):
             entry["messages_incoming"] += 1
 
     return sorted(by_contact.values(), key=lambda e: e["total_messages"], reverse=True)
+
+
+# Default gap between messages that starts a new conversation. There is no
+# principled value here -- 30 minutes is a convention, not a fact, and the
+# count moves a lot with it (on 2019-10-06: 33 conversations at 5 minutes, 22
+# at 30, 14 at 120). The point of putting it in a function is not that 30 is
+# right, but that everyone asking the same question gets the same answer, and
+# the choice is written down where it can be argued with.
+DEFAULT_CONVERSATION_GAP_MINUTES = 30
+
+
+def get_sms_conversation_blocks(uid, start_time, end_time,
+                                gap_minutes=DEFAULT_CONVERSATION_GAP_MINUTES):
+    """Group messages into conversations, one entry per back-and-forth.
+
+    A conversation is messages with the same contact where consecutive
+    messages are no more than ``gap_minutes`` apart. A longer silence ends it,
+    and the next message starts a new one.
+    """
+    records = get_sms_records(uid, start_time, end_time)
+    gap_seconds = gap_minutes * 60
+
+    by_contact = {}
+    for record in records:
+        moment = datetime.strptime(record["message_time"], "%Y-%m-%d %H:%M:%S")
+        by_contact.setdefault(record["contact"], []).append((moment, record))
+
+    conversations = []
+    for contact, entries in by_contact.items():
+        entries.sort(key=lambda e: e[0])
+        current = []
+        for moment, record in entries:
+            if current and (moment - current[-1][0]).total_seconds() > gap_seconds:
+                conversations.append(_conversation(contact, current, gap_minutes))
+                current = []
+            current.append((moment, record))
+        if current:
+            conversations.append(_conversation(contact, current, gap_minutes))
+
+    return sorted(conversations, key=lambda c: c["start_time"])
+
+
+def _conversation(contact, entries, gap_minutes):
+    """One conversation block from its messages."""
+    records = [record for _, record in entries]
+    outgoing = sum(1 for r in records if r["message_type"] == "outgoing")
+    return {
+        "contact": contact,
+        "start_time": entries[0][0].strftime("%Y-%m-%d %H:%M:%S"),
+        "end_time": entries[-1][0].strftime("%Y-%m-%d %H:%M:%S"),
+        "duration_minutes": round((entries[-1][0] - entries[0][0]).total_seconds() / 60, 1),
+        "total_messages": len(records),
+        "messages_outgoing": outgoing,
+        "messages_incoming": len(records) - outgoing,
+        "gap_minutes": gap_minutes,
+    }
 
 
 def _as_int(value):

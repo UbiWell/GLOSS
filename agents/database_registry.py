@@ -18,7 +18,8 @@ REQUIRED_DATA_FILES = {
     'call_log_database': 'calllog_bd6de07d',
     'lock_unlock_database': 'unlock_data_bd6de07d',
     'sms_database': 'smslog_bd6de07d',
-    'sensing_database': 'sensing_bd6de07d',
+    'sensing_mobility_database': 'sensing_bd6de07d',
+    'sensing_behavior_database': 'sensing_bd6de07d',
     'activity_database': 'ios_activity',
     'battery_database': 'ios_battery',
     'brightness_database': 'ios_brightness',
@@ -251,3 +252,36 @@ def get_all_function_refs() -> Dict[str, Callable]:
 def get_import_path_for_database(database_name: str) -> str:
     """Get import path for a specific database"""
     return registry.get_import_path_for_database(database_name)
+
+def get_pending_databases() -> Dict[str, str]:
+    """Databases that exist in data_streams/ but are deliberately not registered.
+
+    A module says so by declaring ``pending_registration = {"name", "info"}``
+    at module level. The tutorial ships one database with its registration
+    commented out for participants to complete, and a database that simply
+    does not appear anywhere looks like a missing feature rather than an
+    exercise -- so it is listed, marked as not yet loaded.
+
+    Anything already registered is dropped from the result, so a stale marker
+    left behind after registration cannot produce a duplicate entry.
+    """
+    directory = os.path.join(os.path.dirname(__file__), '..', 'data_streams')
+    pending: Dict[str, str] = {}
+    if not os.path.isdir(directory):
+        return pending
+
+    registered = set(registry.get_all_databases().keys())
+    for filename in sorted(os.listdir(directory)):
+        if not filename.endswith('_database.py') or filename.startswith('__'):
+            continue
+        try:
+            module = importlib.import_module(f'data_streams.{filename[:-3]}')
+        except ImportError:
+            continue
+        marker = getattr(module, 'pending_registration', None)
+        if not isinstance(marker, dict):
+            continue
+        name = marker.get('name', filename[:-3])
+        if name not in registered:
+            pending[name] = marker.get('info', '')
+    return pending

@@ -16,6 +16,7 @@ from data_streams.sms_data import functions
 
 # Import all the actual function implementations from sms_data.py
 from data_streams.sms_data import (
+    get_sms_conversation_blocks,
     get_sms_records,
     get_sms_stats,
     get_sms_contact_breakdown
@@ -33,7 +34,11 @@ database_info = {
 function_refs = {
     "get_sms_records": get_sms_records,
     "get_sms_stats": get_sms_stats,
-    "get_sms_contact_breakdown": get_sms_contact_breakdown
+    "get_sms_contact_breakdown": get_sms_contact_breakdown,
+
+    # TUTORIAL DEMO: uncomment alongside the "SMS4" entry in sms_data.py to
+    # hand the agent the conversation helper. See TUTORIAL.md, demo 2.
+    # "get_sms_conversation_blocks": get_sms_conversation_blocks,
 }
 
 

@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'agents'
 
 from agents import sensemaking_agent, information_seeking_agent, \
     action_plan_generation_agent, generic_database_manager, presentation_agent
-from agents.database_registry import get_all_databases
+from agents.database_registry import get_all_databases, get_pending_databases
 from agents.next_step_agent import NextStepAgent
 from agents.config import VERBOSE
 import threading
@@ -46,6 +46,14 @@ def print_welcome():
         print(f"\n📱 {device.upper()} DATABASES:")
         for name, info in db_list:
             print(f"   • {name}: {info[:60]}{'...' if len(info) > 60 else ''}")
+
+    # Written but not registered. Listed so a database the agent cannot reach
+    # looks like an exercise rather than a missing feature.
+    pending = get_pending_databases()
+    if pending:
+        print(f"\n⏳ NOT LOADED YET ({len(pending)}):")
+        for name, info in sorted(pending.items()):
+            print(f"   ◦ {name}: {info[:60]}{'...' if len(info) > 60 else ''}")
 
     print("\n" + "="*80 + "\n")
 

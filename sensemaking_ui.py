@@ -30,7 +30,7 @@ import streamlit as st
 
 import sensemaking_process
 from agents.config import LOCAL_MODEL_NAME, USE_LOCAL_MODEL
-from agents.database_registry import get_all_databases
+from agents.database_registry import get_all_databases, get_pending_databases
 
 st.set_page_config(page_title="GLOSS", page_icon="🔍", layout="wide")
 
@@ -264,13 +264,21 @@ with st.sidebar:
                     st.caption(str(exc))
 
     databases = get_all_databases()
+    pending = get_pending_databases()
+    count = f"{len(databases)} databases"
+    if pending:
+        count += f"  ·  {len(pending)} not loaded yet"
     st.caption(
-        f"Model: {LOCAL_MODEL_NAME if USE_LOCAL_MODEL else 'OpenAI'}  ·  "
-        f"{len(databases)} databases"
+        f"Model: {LOCAL_MODEL_NAME if USE_LOCAL_MODEL else 'OpenAI'}  ·  {count}"
     )
     with st.expander("Available data"):
         for name, info in sorted((n, d.info) for n, d in databases.items()):
             st.markdown(f"**{name}**")
+            st.caption(info)
+        # Written but not registered. Shown greyed out rather than hidden, so
+        # the tutorial's registration exercise has something to point at.
+        for name, info in sorted(pending.items()):
+            st.markdown(f"**:gray[{name}]**  :gray[— not loaded yet]")
             st.caption(info)
 
 
@@ -661,12 +669,17 @@ def database_names():
     """
     try:
         names = sorted(get_all_databases().keys())
+        waiting = sorted(get_pending_databases().keys())
     except Exception:  # noqa: BLE001 - the panel is decoration, never fatal
         return []
-    labels = []
-    for name in names:
-        short = name.lower().replace(" database", "").strip() or name
-        labels.append(f"{database_icon(name)}  {short}")
+
+    def short_label(name):
+        return name.lower().replace(" database", "").strip() or name
+
+    labels = [f"{database_icon(n)}  {short_label(n)}" for n in names]
+    # Not registered yet, so the agent cannot reach it. Listed last and marked,
+    # because an absent database reads as missing rather than as an exercise.
+    labels += [f"◦  {short_label(n)} (later)" for n in waiting]
     return labels
 
 
