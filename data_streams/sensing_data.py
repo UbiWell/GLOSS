@@ -19,6 +19,16 @@ The epoch boundaries and the meaning of ``ep_0`` were derived from the data:
 ``F_ep_0`` equals ``F_ep_1 + F_ep_2 + F_ep_3`` on every row for 15 of the 27
 summable families, and equals the sum of all 24 hourly columns. Treat ``ep_0``
 as the daily total, never as a fourth time-of-day slot.
+
+Why the entry points are private
+--------------------------------
+This module is the engine behind the two registered sensing databases, not a
+database itself. Its getters reach every feature, including the half that is
+deliberately left unregistered for the tutorial, so a coding agent that
+imported them would walk straight around registration -- and one did, inferring
+``get_sensing_daily`` from the registered ``get_mobility_daily`` and helping
+itself to features no database had offered it. Private names mean that guess
+fails loudly at the import instead of silently working.
 """
 
 import os
@@ -149,7 +159,7 @@ def _metric_rank(name):
     return len(_METRIC_PRIORITY)
 
 
-def find_sensing_feature(uid, query):
+def _find_feature(uid, query):
     """Rank sensing features against a plain-language description.
 
     Feature names are near-duplicates -- every ``loc_home_*`` feature mentions
@@ -204,70 +214,6 @@ def describe_feature(name):
                 if place in _PLACE_LABELS:
                     return f"{metric_label} {_PLACE_LABELS[place]}"
     return "no description available"
-
-functions = {
-    "SENSE1": {
-        "name": "list_sensing_features",
-        "usecase": ["function_calling", "code_generation"],
-        "description": "Lists the passive sensing feature families available in the sensing database, so a valid feature name can be chosen before querying values. Some families contain no data for a given user and are reported as unavailable.",
-        "params": {
-            "uid": {"type": "str", "description": "The unique identifier for the user."}
-        },
-        "returns": "A dictionary with 'time_resolved' (usable with all sensing functions), 'daily_only' (usable with get_sensing_daily only, mainly the loc_* place features) and 'empty' lists. Each entry gives the exact feature name and a description of what it measures; match the description to the question rather than guessing from the name, since similar names measure different things.",
-        "example": "{'time_resolved': [{'feature': 'act_still', 'description': 'seconds spent stationary'}], 'daily_only': [{'feature': 'loc_home_dur', 'description': 'hours spent at home'}], 'empty': [{'feature': 'act_walking', 'description': 'seconds spent walking'}]}"
-    },
-    "SENSE5": {
-        "name": "find_sensing_feature",
-        "usecase": ["function_calling", "code_generation"],
-        "description": "Finds the right sensing feature name from a plain-language description, ranked best first. Prefer this over scanning list_sensing_features by hand: many features share wording, for example every loc_home_* feature mentions home while only loc_home_dur is the time spent there, so substring matching picks the wrong one.",
-        "params": {
-            "uid": {"type": "str", "description": "The unique identifier for the user."},
-            "query": {"type": "str", "description": "Plain-language description of the wanted measure, e.g. 'hours spent at home' or 'number of conversations'."}
-        },
-        "returns": "A list of candidate features ordered best-match first, each with its exact name, description, match score, and whether it supports epoch/hourly breakdowns. Take the first entry unless its description contradicts the question.",
-        "example": "[{'feature': 'loc_home_dur', 'description': 'hours spent at home', 'score': 0.75, 'granularity': 'daily_only'}]"
-    },
-    "SENSE2": {
-        "name": "get_sensing_daily",
-        "usecase": ["function_calling", "code_generation"],
-        "description": "Returns the daily total of a passive sensing feature for each day in the time range. Use this for questions about how much of something happened per day.",
-        "params": {
-            "uid": {"type": "str", "description": "The unique identifier for the user."},
-            "start_time": {"type": "str", "description": "The start of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
-            "end_time": {"type": "str", "description": "The end of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
-            "feature": {"type": "str", "description": "The feature name, e.g. 'act_still', 'audio_convo_duration' or a daily-only place feature such as 'loc_home_dur'. Call list_sensing_features first if unsure."}
-        },
-        "returns": "A list of per-day values for the feature. Raises ValueError if the feature name is not recognised, or if it is recorded only by hour or epoch.",
-        "example": "[{'date': '2020-11-02', 'feature': 'act_still', 'value': 77001.0}]"
-    },
-    "SENSE3": {
-        "name": "get_sensing_by_epoch",
-        "usecase": ["function_calling", "code_generation"],
-        "description": "Returns a passive sensing feature split into time-of-day epochs for each day: night/morning (00:00-09:00), day (09:00-18:00) and evening (18:00-24:00), alongside the whole-day total. Use this for questions about when during the day something happened.",
-        "params": {
-            "uid": {"type": "str", "description": "The unique identifier for the user."},
-            "start_time": {"type": "str", "description": "The start of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
-            "end_time": {"type": "str", "description": "The end of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
-            "feature": {"type": "str", "description": "The feature family name, e.g. 'act_still'."}
-        },
-        "returns": "A list of per-day epoch breakdowns. 'whole_day' is the daily total, not a fourth epoch, and equals the sum of the three epochs for additive features. Raises ValueError naming the granularities a feature does have, if it is not recorded at this one -- the loc_* place features are daily-only, for instance.",
-        "example": "[{'date': '2020-11-02', 'feature': 'act_still', 'whole_day': 77001.0, '00:00-09:00': 31115.0, '09:00-18:00': 27563.0, '18:00-24:00': 18322.0}]"
-    },
-    "SENSE4": {
-        "name": "get_sensing_hourly",
-        "usecase": ["function_calling", "code_generation"],
-        "description": "Returns a passive sensing feature broken down by hour of day for each day in the range. Use this for questions about a specific hour or about the shape of a day.",
-        "params": {
-            "uid": {"type": "str", "description": "The unique identifier for the user."},
-            "start_time": {"type": "str", "description": "The start of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
-            "end_time": {"type": "str", "description": "The end of the time range, in the format '%Y-%m-%d %H:%M:%S'."},
-            "feature": {"type": "str", "description": "The feature family name, e.g. 'act_still'."}
-        },
-        "returns": "A list of per-day, per-hour values with 'hour' as an integer from 0 to 23. Raises ValueError naming the granularities a feature does have, if it is not recorded at this one -- the loc_* place features are daily-only, for instance.",
-        "example": "[{'date': '2020-11-02', 'feature': 'act_still', 'hour': 0, 'value': 3308.0}]"
-    },
-}
-
 
 def _load(uid):
     """Read the sensing CSV and return this user's rows, indexed by date."""
@@ -358,11 +304,11 @@ def _daily_column(frame, feature):
     return None
 
 
-def list_sensing_features(uid):
+def _list_features(uid):
     """List feature families, separating ones that hold no data for this user.
 
     Time-resolved features work with all four functions; daily-only features
-    work with get_sensing_daily alone.
+    work with _daily alone.
     """
     frame = _load(uid)
     if frame.empty:
@@ -381,7 +327,7 @@ def list_sensing_features(uid):
     return result
 
 
-def get_sensing_daily(uid, start_time, end_time, feature):
+def _daily(uid, start_time, end_time, feature):
     """Daily total of a feature for each day in the range.
 
     Works for both time-resolved features and the daily-only ``loc_*`` ones.
@@ -399,7 +345,7 @@ def get_sensing_daily(uid, start_time, end_time, feature):
         for _, row in frame.iterrows()
     ]
 
-def get_sensing_by_epoch(uid, start_time, end_time, feature):
+def _by_epoch(uid, start_time, end_time, feature):
     """Feature split by time-of-day epoch for each day in the range."""
     frame = _in_range(_load(uid), start_time, end_time)
     if frame.empty:
@@ -421,7 +367,7 @@ def get_sensing_by_epoch(uid, start_time, end_time, feature):
     return results
 
 
-def get_sensing_hourly(uid, start_time, end_time, feature):
+def _hourly(uid, start_time, end_time, feature):
     """Feature broken down by hour of day for each day in the range."""
     frame = _in_range(_load(uid), start_time, end_time)
     if frame.empty:
@@ -470,17 +416,17 @@ def _reject_feature(feature, frame, wanted):
     """
     available = []
     if _daily_column(frame, feature) is not None:
-        available.append(("daily", "get_sensing_daily"))
+        available.append(("daily", "_daily"))
     if _feature_columns(frame, feature, "ep"):
-        available.append(("epoch", "get_sensing_by_epoch"))
+        available.append(("epoch", "_by_epoch"))
     if _feature_columns(frame, feature, "hr"):
-        available.append(("hourly", "get_sensing_hourly"))
+        available.append(("hourly", "_hourly"))
 
     if not available:
         time_resolved, daily_only = _families(frame)
         raise ValueError(
             f"Unknown sensing feature '{feature}'.\n"
-            f"Call find_sensing_feature(uid, '<plain-language description>') and use the "
+            f"Call _find_feature(uid, '<plain-language description>') and use the "
             f"name it ranks first, rather than guessing a name.\n"
             f"Available features: {_name_list(time_resolved + daily_only)}."
         )
@@ -498,5 +444,5 @@ def _reject_feature(feature, frame, wanted):
 
 if __name__ == "__main__":
     UID = "user1"
-    print(get_sensing_daily(UID, "2020-11-02 00:00:00", "2020-11-02 23:59:59", "act_still"))
-    print(get_sensing_by_epoch(UID, "2020-11-02 00:00:00", "2020-11-02 23:59:59", "act_still"))
+    print(_daily(UID, "2020-11-02 00:00:00", "2020-11-02 23:59:59", "act_still"))
+    print(_by_epoch(UID, "2020-11-02 00:00:00", "2020-11-02 23:59:59", "act_still"))

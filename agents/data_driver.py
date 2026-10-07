@@ -14,7 +14,8 @@ import data_streams.lock_unlock_data as lock_unlock_data
 import data_streams.app_usage_data as app_usage_data
 import data_streams.call_log as call_log
 import data_streams.sms_data as sms_data
-import data_streams.sensing_data as sensing_data
+import data_streams.sensing_mobility_data as sensing_mobility_data
+import data_streams.sensing_behavior_data as sensing_behavior_data
 
 # The module backing each data_type tag. Keys must match the values produced by
 # _data_type_for() below.
@@ -23,7 +24,8 @@ _MODULES = {
     'app_usage': app_usage_data,
     'call_log': call_log,
     'sms': sms_data,
-    'sensing': sensing_data,
+    'sensing_mobility': sensing_mobility_data,
+    'sensing_behavior': sensing_behavior_data,
 }
 
 # Function-id prefix -> data_type. The LLM returns ids such as "SMS2" or
@@ -32,7 +34,8 @@ _MODULES = {
 # first to keep it that way if ids are ever added.
 _ID_PREFIXES = (
     ('CALLLOG', 'call_log'),
-    ('SENSE', 'sensing'),
+    ('MOBILITY', 'sensing_mobility'),
+    ('BEHAVIOR', 'sensing_behavior'),
     ('SMS', 'sms'),
     ('APP', 'app_usage'),
     ('UL', 'lock_unlock'),
@@ -40,7 +43,8 @@ _ID_PREFIXES = (
 
 all_functions = {**lock_unlock_data.functions, **app_usage_data.functions,
                  **call_log.functions, **sms_data.functions,
-                 **sensing_data.functions}
+                 **sensing_mobility_data.functions,
+                 **sensing_behavior_data.functions}
 
 
 def run_function_from_dict(function_name, params, type):

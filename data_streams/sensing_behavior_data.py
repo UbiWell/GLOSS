@@ -56,11 +56,11 @@ def _guard(feature):
 # registration it is supposed to go through. Rewrite the names to this
 # database's own before the message reaches anyone.
 _ENGINE_NAMES = {
-    "list_sensing_features": "list_behavior_features",
-    "find_sensing_feature": "find_behavior_feature",
-    "get_sensing_daily": "get_behavior_daily",
-    "get_sensing_by_epoch": "get_behavior_by_epoch",
-    "get_sensing_hourly": "get_behavior_hourly",
+    "_list_features": "list_behavior_features",
+    "_find_feature": "find_behavior_feature",
+    "_daily": "get_behavior_daily",
+    "_by_epoch": "get_behavior_by_epoch",
+    "_hourly": "get_behavior_hourly",
 }
 
 
@@ -74,7 +74,7 @@ def _own_names(error):
 
 def list_behavior_features(uid):
     """Behaviour feature families, split the same way sensing_data splits them."""
-    everything = sensing_data.list_sensing_features(uid)
+    everything = sensing_data._list_features(uid)
     return {
         bucket: [e for e in entries if owns_feature(e["feature"])]
         for bucket, entries in everything.items()
@@ -83,7 +83,7 @@ def list_behavior_features(uid):
 
 def find_behavior_feature(uid, query):
     """Rank this database's features against a plain-language description."""
-    ranked = sensing_data.find_sensing_feature(uid, query)
+    ranked = sensing_data._find_feature(uid, query)
     return [e for e in ranked if owns_feature(e["feature"])][:10]
 
 
@@ -91,7 +91,7 @@ def get_behavior_daily(uid, start_time, end_time, feature):
     """Daily total of a behaviour feature for each day in the range."""
     _guard(feature)
     try:
-        return sensing_data.get_sensing_daily(uid, start_time, end_time, feature)
+        return sensing_data._daily(uid, start_time, end_time, feature)
     except ValueError as error:
         raise _own_names(error) from None
 
@@ -100,7 +100,7 @@ def get_behavior_by_epoch(uid, start_time, end_time, feature):
     """Behaviour feature split into time-of-day epochs for each day."""
     _guard(feature)
     try:
-        return sensing_data.get_sensing_by_epoch(uid, start_time, end_time, feature)
+        return sensing_data._by_epoch(uid, start_time, end_time, feature)
     except ValueError as error:
         raise _own_names(error) from None
 
@@ -109,7 +109,7 @@ def get_behavior_hourly(uid, start_time, end_time, feature):
     """Behaviour feature broken down by hour of day for each day."""
     _guard(feature)
     try:
-        return sensing_data.get_sensing_hourly(uid, start_time, end_time, feature)
+        return sensing_data._hourly(uid, start_time, end_time, feature)
     except ValueError as error:
         raise _own_names(error) from None
 
