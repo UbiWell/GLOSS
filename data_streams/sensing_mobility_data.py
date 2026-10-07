@@ -49,6 +49,28 @@ def _guard(feature):
         )
 
 
+# The shared engine raises advice naming its own functions -- "available as:
+# hourly via get_sensing_hourly(...)". Those are not what this database
+# exposes, and following that advice would take the agent around the
+# registration it is supposed to go through. Rewrite the names to this
+# database's own before the message reaches anyone.
+_ENGINE_NAMES = {
+    "list_sensing_features": "list_mobility_features",
+    "find_sensing_feature": "find_mobility_feature",
+    "get_sensing_daily": "get_mobility_daily",
+    "get_sensing_by_epoch": "get_mobility_by_epoch",
+    "get_sensing_hourly": "get_mobility_hourly",
+}
+
+
+def _own_names(error):
+    """Re-raise an engine error with this database's function names in it."""
+    message = str(error)
+    for engine, ours in _ENGINE_NAMES.items():
+        message = message.replace(engine, ours)
+    return ValueError(message)
+
+
 def list_mobility_features(uid):
     """Mobility feature families, split the same way sensing_data splits them."""
     everything = sensing_data.list_sensing_features(uid)
@@ -67,19 +89,28 @@ def find_mobility_feature(uid, query):
 def get_mobility_daily(uid, start_time, end_time, feature):
     """Daily total of a mobility feature for each day in the range."""
     _guard(feature)
-    return sensing_data.get_sensing_daily(uid, start_time, end_time, feature)
+    try:
+        return sensing_data.get_sensing_daily(uid, start_time, end_time, feature)
+    except ValueError as error:
+        raise _own_names(error) from None
 
 
 def get_mobility_by_epoch(uid, start_time, end_time, feature):
     """Mobility feature split into time-of-day epochs for each day."""
     _guard(feature)
-    return sensing_data.get_sensing_by_epoch(uid, start_time, end_time, feature)
+    try:
+        return sensing_data.get_sensing_by_epoch(uid, start_time, end_time, feature)
+    except ValueError as error:
+        raise _own_names(error) from None
 
 
 def get_mobility_hourly(uid, start_time, end_time, feature):
     """Mobility feature broken down by hour of day for each day."""
     _guard(feature)
-    return sensing_data.get_sensing_hourly(uid, start_time, end_time, feature)
+    try:
+        return sensing_data.get_sensing_hourly(uid, start_time, end_time, feature)
+    except ValueError as error:
+        raise _own_names(error) from None
 
 
 functions = {
@@ -111,7 +142,7 @@ functions = {
     "MOBILITY3": {
         "name": "get_mobility_daily",
         "usecase": ["function_calling", "code_generation"],
-        "description": "Daily total of one location or activity feature, for each day in the range. Works for every mobility feature, including the per-place loc_* ones that have no finer breakdown.",
+        "description": "Daily total of one location or activity feature, for each day in the range. Covers the per-place loc_* features, which have no finer breakdown. Coverage is ragged: a few features are recorded only hourly (act_tilting and act_unknown have no daily value), and the error names the function to use instead.",
         "params": {
             "uid": {"type": "str", "description": "The unique identifier for the user."},
             "start_time": {"type": "str", "description": "Start of the range, 'YYYY-MM-DD HH:MM:SS'."},

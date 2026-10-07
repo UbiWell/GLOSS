@@ -67,7 +67,12 @@ class GenericDatabaseManager:
             else:
                 print(f"Warning: Database '{database_name}' not found in registry")
 
-        coding_functions_obj = GenericCodingFunctions(calling_functions, req_databases)
+        # Normalised, not raw: the function lookup above already uses these, and
+        # passing the raw names meant a request for "sensing mobility" rather than
+        # "sensing mobility database" found its functions but no import path. The
+        # coding agent then received no imports and invented its own, reaching
+        # module-level functions that were never registered.
+        coding_functions_obj = GenericCodingFunctions(calling_functions, normalized_databases)
         if ONLY_CODE_FUNCTIONS:
             cfs = coding_functions_obj.coding_functions
         else:

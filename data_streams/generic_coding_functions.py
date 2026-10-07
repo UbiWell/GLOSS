@@ -91,6 +91,11 @@ class GenericCodingFunctions:
             
             if import_statement:
                 function_imports += import_statement
+            else:
+                # Silence here is how the coding agent ends up inventing its own
+                # imports and calling functions no database exposes.
+                print(f"Warning: no import path for database '{database}'; the "
+                      f"coding agent will have to guess its imports")
 
         results = run_coding_agent(user_query=user_query, database=self.databases, functions=self.functions,
                                    include_statements=include_statements, function_imports=function_imports)
