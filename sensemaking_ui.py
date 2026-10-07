@@ -394,8 +394,13 @@ def stage_timeline(trace, current_step):
 
 def render_overview(maker, trace):
     summary = trace.summary()
+    # A replay reports the recorded run's timings, not the playback's, so the
+    # numbers agree with each other -- but unlabelled, "70s" next to a replay
+    # that visibly took 25 reads as a bug.
+    offline = getattr(maker, "offline", False)
     columns = st.columns(4)
-    columns[0].metric("Elapsed", f"{summary.get('elapsed', 0):.0f}s")
+    columns[0].metric("Elapsed (recorded)" if offline else "Elapsed",
+                      f"{summary.get('elapsed', 0):.0f}s")
     columns[1].metric("Model calls", summary.get("llm_calls", 0))
     columns[2].metric(
         "Tokens",
@@ -406,11 +411,17 @@ def render_overview(maker, trace):
     elapsed = summary.get("elapsed") or 0
     waiting = summary.get("llm_seconds") or 0
     if elapsed and waiting:
-        st.caption(
-            f"{waiting:.0f}s of the {elapsed:.0f}s was spent waiting on the language "
-            f"model ({waiting / elapsed * 100:.0f}%). The model is shared, so a run "
-            "takes longer when others are querying it at the same time."
-        )
+        line = (f"{waiting:.0f}s of the {elapsed:.0f}s was spent waiting on the "
+                f"language model ({waiting / elapsed * 100:.0f}%).")
+        if offline:
+            # The shared-model explanation is not just unhelpful here, it is
+            # false: a replay calls nothing.
+            line += (" These are the timings of the run that was recorded. The "
+                     "replay itself takes about 25 seconds and calls no model.")
+        else:
+            line += (" The model is shared, so a run takes longer when others are "
+                     "querying it at the same time.")
+        st.caption(line)
 
     errors = trace.events(kind="error")
     if errors:
