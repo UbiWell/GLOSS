@@ -44,9 +44,15 @@ After: **3.0 hours**.
 > lock/unlock database does not measure sleep.
 >
 > Do **not** fall back on *"How many conversations was user1 around on
-> 2019-10-06?"*. Unregistered, it does not refuse: it reads "conversations" as
-> calls plus texting threads and answers 46. Sleep has no stand-in among the
-> registered databases, which is exactly why it refuses cleanly.
+> 2019-10-06?"*. Unregistered it does not refuse, and its answer is not so
+> much wrong as to a different question. The planner reads "conversations" as
+> phone calls plus texting threads, drops "around" — the word that would have
+> pinned it to the microphone — and composes a plan from the call log and sms
+> databases, never needing the one it does not have. It answers 46.
+>
+> That is demo 2's problem turning up inside demo 1: an ambiguous word with a
+> plausible stand-in already registered. Sleep works precisely because nothing
+> registered can pretend to measure it.
 
 ---
 
