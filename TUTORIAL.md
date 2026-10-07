@@ -113,9 +113,14 @@ Replays recorded runs instead of calling the model, so the examples work even
 if the gateway is slow or down. A sidebar toggle, off by default; the question
 box becomes a dropdown of recorded questions.
 
-The demos work offline too. Each demo question is recorded twice, and the
-matching recording is picked from what is registered on that instance — so
-uncommenting and restarting flips the answer exactly as a live run would.
+The demos work offline too. Each demo question is recorded twice and both are
+listed, as `(commented)` and `(uncommented)` — so you pick the side you want
+rather than depending on what happens to be registered:
+
+```
+Sleep (demo 1)  (commented)        → refuses
+Sleep (demo 1)  (uncommented)      → 3.0 hours
+```
 
 ### Recording, before the session
 
@@ -157,12 +162,18 @@ ls ~/gloss-repo/offline_runs/*.json | wc -l        # expect 13
 sudo bash deploy/update_instances.sh --apply
 ```
 
-Thirteen files, ten rows in the picker: seven questions recorded once, three
-recorded twice. Recordings are not committed to git.
+Thirteen files, thirteen rows in the picker: seven questions recorded once,
+three recorded twice. Recordings are not committed to git.
 
-Other flags: `--list` shows what is recorded, `--only <text>` records one
-question, `--prune` deletes recordings whose question or instructions have
-since been edited.
+Other flags, all run the same way:
+
+| Flag | What it does |
+|---|---|
+| `--list` | what is recorded, and under which state |
+| `--only <text>` | record one question |
+| `--demos` | the three demo questions only |
+| `--prune` | delete recordings whose question or instructions have since been edited |
+| `--relabel` | stamp `(commented)`/`(uncommented)` onto recordings made before labels existed; run in the shipped state |
 
 ---
 
@@ -174,6 +185,7 @@ since been edited.
 | `IndentationError` or `SyntaxError` | A line kept a stray `#`; the block must line up with its neighbours |
 | Database still missing | `grep -c "^database_info" data_streams/sensing_behavior_database.py` — expect `1` |
 | Agent still invents its own grouping code | The `"SMS4"` metadata entry is what it reads, not `function_refs` |
-| Same question twice in the picker | A stale recording: `--prune` |
-| A demo query replays the wrong answer | Restart Streamlit; if that is not it, `--list` should show that question twice with different fingerprints |
+| A non-demo question appears twice | A stale recording whose question or instructions were edited: `--prune`. The three demo questions are meant to appear twice |
+| A demo question has no `(commented)`/`(uncommented)` label | Recorded before labels existed: `--relabel` |
+| A demo question appears once, not twice | Only one state was recorded — do the `--demos` pass in the other |
 | Start over | `git checkout data_streams/` on the host, then `--apply`. Instances are not git checkouts |
