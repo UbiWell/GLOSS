@@ -156,6 +156,10 @@ out &mdash; the <strong>Overview</strong> tab shows which one it chose.</p>
 <ul>
   <li><strong>The browser will not load the page.</strong> Check the dashboard is
       still running in your terminal window.</li>
+  <li><strong>Starting the dashboard says the port is already in use.</strong> An
+      earlier dashboard of yours is still running &mdash; your connection dropped
+      before you could stop it. Stop it, then start again:
+      <pre>kill $(./port_pid.sh)</pre></li>
   <li><strong>ssh said <code>bind: Address already in use</code>.</strong> Something
       on your own machine is using port 8501. Reconnect with
       <code>-L 8601:127.0.0.1:&lt;your UI port&gt;</code> and open

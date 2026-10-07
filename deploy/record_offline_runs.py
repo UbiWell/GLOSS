@@ -48,7 +48,11 @@ put the files back afterwards.
     python deploy/record_offline_runs.py            # everything, shipped state
     # ... uncomment both demos, per TUTORIAL.md ...
     python deploy/record_offline_runs.py --demos    # the demo questions again
-    git checkout data_streams/                      # back to the demo state
+    sudo bash deploy/update_instances.sh --apply    # back to the demo state
+
+An instance is not a git checkout -- update_instances.sh excludes .git -- so
+reverting it means rsyncing the source over it, not `git checkout`. Collect the
+recordings out of the instance before doing that.
 
 --demos re-records only the questions whose answers change once their demo has
 been performed, so the second pass is three runs rather than all ten. The rest

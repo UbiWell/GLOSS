@@ -93,6 +93,19 @@ for repo in "${BASE_DIR}"/p[0-9][0-9]; do
     changes="$(rsync -a "${DRY[@]}" "${EXCLUDES[@]}" "${DELETE[@]}" "${backup[@]}" \
         --itemize-changes "${TEMPLATE}/" "${repo}/" | grep -vE '^\.d|^$' || true)"
 
+    # Recorded runs are the one place deletions are mirrored without --force.
+    # They are generated, never participant-created, so there is nothing to
+    # lose -- and without this a re-recorded run accumulates alongside the old
+    # one, leaving the dashboard offering the same question twice with
+    # different answers. Instances reached 22 files against the source's 13
+    # before this existed.
+    if [[ -d "${TEMPLATE}/offline_runs" ]]; then
+        removed="$(rsync -a "${DRY[@]}" --delete --itemize-changes \
+            "${TEMPLATE}/offline_runs/" "${repo}/offline_runs/" \
+            | grep '^\*deleting' || true)"
+        [[ -n "$removed" ]] && changes="${changes}"$'\n'"${removed}"
+    fi
+
     if [[ -z "$changes" ]]; then
         echo "  ${participant}: already up to date"
     else
