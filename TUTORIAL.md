@@ -39,9 +39,14 @@ After: **3.0 hours**.
 `UNCOMMENT EVERYTHING BELOW`, which is `database_info`, `function_refs` and
 `register_database()`. Delete the `pending_registration` block above it.
 
-> If GLOSS tries to infer sleep from how long the phone sat locked, use
-> *"How many conversations was user1 around on 2019-10-06?"* instead — no other
-> database records audio.
+> If GLOSS infers sleep from how long the phone sat locked, say so — that is
+> what an agent does when asked for something it cannot measure, and the
+> lock/unlock database does not measure sleep.
+>
+> Do **not** fall back on *"How many conversations was user1 around on
+> 2019-10-06?"*. Unregistered, it does not refuse: it reads "conversations" as
+> calls plus texting threads and answers 46. Sleep has no stand-in among the
+> registered databases, which is exactly why it refuses cleanly.
 
 ---
 
