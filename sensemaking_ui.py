@@ -246,7 +246,7 @@ with st.sidebar:
                 "Recorded question",
                 options=range(len(recordings)),
                 index=index,
-                format_func=lambda i: recordings[i].get("label") or recordings[i]["query"],
+                format_func=lambda i: offline_runs.picker_label(recordings[i]),
                 disabled=is_running(),
             )
             st.session_state.offline_choice = chosen

@@ -66,6 +66,7 @@ Recording every query takes a while: these are real runs.
 """
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -129,14 +130,14 @@ QUERIES = [
     # TUTORIAL.md demo 1 -- record before and after registering the database.
     {
         "label": "Sleep (demo 1)",
-        "demo": True,
+        "demo": "database",
         "query": "How many hours did user1 sleep on 2019-10-06?",
         "instructions": CLEAR,
         "note": "Demo 1. Fails before the sensing behaviour database is registered.",
     },
     {
         "label": "Conversations overheard (demo 1 alternative)",
-        "demo": True,
+        "demo": "database",
         "query": "How many conversations was user1 around on 2019-10-06?",
         "instructions": CLEAR,
         "note": "Demo 1 alternative, for when sleep gets inferred from lock/unlock.",
@@ -144,12 +145,69 @@ QUERIES = [
     # TUTORIAL.md demo 2 -- record before and after registering the helper.
     {
         "label": "Texting conversations (demo 2)",
-        "demo": True,
+        "demo": "helper",
         "query": "How many separate texting conversations did user1 have on 2019-10-06?",
         "instructions": CLEAR,
         "note": "Demo 2. Answer varies until get_sms_conversation_blocks is registered.",
     },
 ]
+
+
+def demo_is_registered(which):
+    """Whether the thing a demo registers is registered in this instance.
+
+    "database" is demo 1's sensing behaviour database; "helper" is demo 2's
+    conversation function on the sms database. Checked rather than assumed, so
+    a recording is labelled by what was actually true when it ran.
+    """
+    from agents.database_registry import get_all_databases, get_functions_for_database
+    if which == "database":
+        return "sensing behavior database" in get_all_databases()
+    if which == "helper":
+        return any(f.get("name") == "get_sms_conversation_blocks"
+                   for f in get_functions_for_database("sms database").values())
+    return None
+
+
+def state_label_for(item):
+    """"(commented)" or "(uncommented)" for a demo question; blank otherwise."""
+    registered = demo_is_registered(item.get("demo"))
+    if registered is None:
+        return ""
+    return "(uncommented)" if registered else "(commented)"
+
+
+def relabel():
+    """Stamp state labels onto recordings made before labels existed.
+
+    For each demo question the recording matching this instance's fingerprint
+    is from this state, and any other recording of it is from the other. Run
+    it once, in the shipped state, rather than recording everything again.
+    """
+    here = offline_runs.state_fingerprint()
+    by_query = {}
+    for recording in offline_runs.load_recordings():
+        by_query.setdefault(recording["query"].strip(), []).append(recording)
+
+    stamped = 0
+    for item in QUERIES:
+        if not item.get("demo"):
+            continue
+        mine = state_label_for(item)
+        theirs = "(uncommented)" if mine == "(commented)" else "(commented)"
+        for recording in by_query.get(item["query"].strip(), []):
+            label = mine if recording.get("fingerprint") == here else theirs
+            if recording.get("state_label") == label:
+                continue
+            recording["state_label"] = label
+            path = recording.pop("_path")
+            with open(path, "w") as handle:
+                json.dump(recording, handle, indent=2, default=str)
+            print(f"  {label:15} {recording.get('label') or recording['query'][:40]}")
+            stamped += 1
+    print(f"\n==> {stamped} recording(s) labelled."
+          if stamped else "==> Nothing to label.")
+    return 0
 
 
 def existing_ids():
@@ -198,6 +256,9 @@ def main():
     parser.add_argument("--demos", action="store_true",
                         help="only the tutorial demo questions, whose answers change "
                              "once their demo has been performed")
+    parser.add_argument("--relabel", action="store_true",
+                        help="stamp (commented)/(uncommented) onto existing "
+                             "recordings, then exit; run in the shipped state")
     parser.add_argument("--prune", action="store_true",
                         help="delete recordings of questions or instructions no "
                              "longer in this file, then exit")
@@ -221,6 +282,9 @@ def main():
 
     if args.prune:
         return prune()
+
+    if args.relabel:
+        return relabel()
 
     wanted = QUERIES
     if args.demos:
@@ -264,7 +328,7 @@ def main():
         path = offline_runs.save_recording(
             query=query, instructions=instructions, fingerprint=fingerprint,
             maker=maker, label=item["label"], note=item.get("note", ""),
-            order=QUERIES.index(item),
+            order=QUERIES.index(item), state_label=state_label_for(item),
         )
         answer = (maker.answer or "").replace("\n", " ")[:72]
         print(f"            {time.time() - started:.0f}s -> {os.path.basename(path)}")

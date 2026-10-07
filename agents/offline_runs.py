@@ -110,30 +110,29 @@ def load_recordings():
 
 
 def available_runs():
-    """Recordings offered in the picker, one per question, best match first.
+    """Every recording, in the picker's order.
 
-    Where a question has been recorded under several states, the one matching
-    this instance keeps its place and the others are dropped, so the picker
-    lists each question once and plays the answer that is true right now.
+    The demo questions appear twice, labelled "(commented)" and
+    "(uncommented)", rather than one row chosen from what is registered right
+    now. Choosing automatically was invisible and therefore hard to trust: it
+    also had no answer for a half-registered instance, which is what you get
+    between performing the first demo and the second. Showing both and letting
+    the presenter pick needs no explanation and cannot be in the wrong state.
     """
-    here = state_fingerprint()
-    by_question = {}
-    for recording in load_recordings():
-        key = (recording["query"].strip(), (recording.get("instructions") or "").strip())
-        existing = by_question.get(key)
-        if existing is None:
-            by_question[key] = recording
-            continue
-        # Prefer the one recorded in this instance's state.
-        if recording.get("fingerprint") == here and existing.get("fingerprint") != here:
-            by_question[key] = recording
-    runs = list(by_question.values())
-    runs.sort(key=lambda r: r.get("order", 999))
+    runs = load_recordings()
+    runs.sort(key=lambda r: (r.get("order", 999), r.get("state_label", "")))
     return runs
 
 
+def picker_label(recording):
+    """How one recording reads in the dropdown."""
+    label = recording.get("label") or recording["query"]
+    state = recording.get("state_label") or ""
+    return f"{label}  {state}".strip()
+
+
 def save_recording(*, query, instructions, fingerprint, maker, label="", note="",
-                   order=999):
+                   order=999, state_label=""):
     """Write one completed run to disk, returning its path.
 
     ``order`` fixes where this question sits in the dashboard's picker, so the
@@ -146,6 +145,10 @@ def save_recording(*, query, instructions, fingerprint, maker, label="", note=""
         "label": label or query,
         "note": note,
         "order": order,
+        # "(commented)" / "(uncommented)" for the demo questions, so the picker
+        # says which side of the demo a recording is from. Blank for everything
+        # else, which has only one recording and no state to be in.
+        "state_label": state_label,
         "fingerprint": fingerprint,
         "recorded_at": time.time(),
         "final": {
