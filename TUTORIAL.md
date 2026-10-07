@@ -52,9 +52,27 @@ After: **3.0 hours**.
 > On 2019-10-06, how many separate back-and-forth texting exchanges did user1
 > have, where a long gap with no messages starts a new one?
 
-Before: the agent has to pick a gap and does so silently, so answers vary —
-33 at 5 minutes, 26 at 15, 22 at 30, 14 at 120. After: **22**, for everyone,
-because the helper fixes the gap at a documented 30 minutes.
+Before: **9**. After: **22**.
+
+The agent makes two silent decisions to get 9. It picks a gap — 30 minutes,
+unprompted — and it sorts every message into one stream, so a text to one
+person and a text to another twenty minutes later count as the same
+conversation. Both are invisible in the answer:
+
+| gap it picks | one combined stream (what it does) | per contact (what the helper does) |
+|---|---|---|
+| 5 min | 24 | 33 |
+| 30 min | **9** | **22** |
+| 120 min | 4 | 14 |
+
+The helper encodes both decisions, so everyone gets 22. Show the **Generated
+code** tab on each side — before, a hand-rolled loop with a bare `timedelta(minutes=30)`;
+after, one call to `get_sms_conversation_blocks`, with the agent saying it is
+using the function because it "handles the long gap logic".
+
+> The 9 is a coincidence worth not being caught out by: user1 texted 9 people
+> that day, so the wrong method lands on a number that looks like an obvious
+> right answer.
 
 > Do not shorten this to "how many separate texting conversations". That reads
 > as "how many people did they text", and the agent answers it with
