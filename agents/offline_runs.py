@@ -278,6 +278,13 @@ class ReplayRun:
         with self.trace._lock:  # noqa: SLF001 - replaying into a trace
             if self.trace._events:
                 self.trace._events[-1]["elapsed"] = recorded
+            # Wind the start back so the running total reads in recorded time
+            # too. summary() computes elapsed as now - started_at, which while
+            # a replay is in flight was the playback clock -- four seconds in,
+            # against model latencies from a run that took seventy, giving
+            # "11s of the 4s (245%)". Fixing only the final value left that
+            # visible for the whole replay, and frozen there if it was stopped.
+            self.trace.started_at = time.time() - recorded
 
     def _emit(self, event):
         """Put one recorded event on the live trace and update the fields."""
