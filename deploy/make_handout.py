@@ -67,11 +67,16 @@ def read_participants(path: pathlib.Path):
 
 
 def build_html(rows, host: str, port: str) -> str:
+    # One login command per participant, with the tunnel already in it. There
+    # used to be two -- a plain terminal login and a second one for the
+    # dashboard -- and two ways in meant two sets of instructions and people
+    # lost between them. The dashboard is the only way participants use GLOSS,
+    # so the command that reaches it is the only one printed.
     table_rows = "\n".join(
         f'      <tr><td class="mono">{html.escape(r["user"])}</td>'
         f'<td class="mono">{html.escape(r["password"])}</td>'
-        f'<td class="mono">ssh -p {html.escape(port)} {html.escape(r["user"])}@{html.escape(host)}</td>'
-        f'<td class="mono">ssh -p {html.escape(port)} -L 8501:127.0.0.1:{html.escape(r["uiport"] or "8501")} '
+        f'<td class="mono">ssh -p {html.escape(port)} '
+        f'-L 8501:127.0.0.1:{html.escape(r["uiport"] or "8501")} '
         f'{html.escape(r["user"])}@{html.escape(host)}</td></tr>'
         for r in rows
     )
@@ -80,86 +85,89 @@ def build_html(rows, host: str, port: str) -> str:
 
 <h1>GLOSS hands-on tutorial</h1>
 <p class="sub">Each participant has their own private copy of GLOSS on a shared
-server. You can edit the code freely: nothing you do affects anyone else.</p>
+server. Nothing you do affects anyone else.</p>
 
-<h2>1. Log in</h2>
-<p>Open a terminal and run the command from your row in the table below,
-substituting nothing &mdash; it is complete as printed. Enter your password when
-prompted (it will not appear on screen as you type).</p>
-<pre>ssh -p {html.escape(port)} p01@{html.escape(host)}</pre>
-<p>You will land directly inside your own GLOSS instance, in your copy of the
-code. There is nothing to install or activate.</p>
+<h2>1. Connect</h2>
+<p>Open a terminal and run the command from your row in the table at the end.
+It is complete as printed &mdash; nothing to substitute. Enter your password when
+prompted; <strong>it will not appear on screen as you type</strong>, which is
+normal.</p>
+<pre>ssh -p {html.escape(port)} -L 8501:127.0.0.1:&lt;your UI port&gt; p01@{html.escape(host)}</pre>
+<p>The first time, it will ask you to accept the host key: type
+<code>yes</code>. You will land directly inside your own GLOSS instance. There
+is nothing to install or activate.</p>
 
-<h2>2. Run your first query</h2>
-<pre>python sensemaking_process.py</pre>
-<p>This runs the full sensemaking pipeline and prints every stage: the action
-plan, the databases it chooses, the code it generates, and the final answer.
-Expect it to take a few minutes.</p>
+<h2>2. Start the dashboard</h2>
+<p>In that same window, run:</p>
+<pre>streamlit run sensemaking_ui.py</pre>
+<p>Wait for <code>You can now view your Streamlit app in your browser</code>,
+then open this address in your own browser:</p>
+<pre>http://localhost:8501</pre>
+<p><strong>Leave the terminal window open</strong> while you use the dashboard
+&mdash; closing it stops the dashboard. Press <code>Ctrl-C</code> there when you
+are done.</p>
+
+<h2>3. Ask a question</h2>
+<p>Everything happens in the left-hand sidebar:</p>
+<ul>
+  <li><strong>Question</strong> &mdash; type one, or click one of the examples below the box</li>
+  <li><strong>How should the answer be presented?</strong> &mdash; for example
+      <code>clear and concise</code>, or <code>three bullet points</code></li>
+  <li>Press <strong>Run</strong></li>
+</ul>
+<p>Both boxes need something in them, or <strong>Run</strong> stays greyed out.
+The second one matters more than it looks: the same evidence presented two ways
+gives two quite different answers.</p>
+
+<div class="note"><strong>Always say who and when.</strong> Put the user id
+(<code>user1</code>) and a date or date range in every question. GLOSS assumes
+no default for either, so <em>how many texts were sent?</em> has nothing to look
+up &mdash; <em>how many texts did user1 send on 2020-11-02?</em> does.</div>
 
 <div class="note"><strong>The CODE GENERATION stage prints nothing while it
 runs.</strong> Several minutes of silence there is normal &mdash; it is not stuck.</div>
 
-<h2>3. Ask your own question</h2>
-<p>Open <code>sensemaking_process.py</code>, scroll to the bottom, and edit the
-<code>query</code> string. Then run it again.</p>
-<pre>query = '''
-on nov 2 2020, for user1 how many text messages were sent and received?'''</pre>
-<p>The user id in this dataset is always <code>user1</code>. Five databases are
-available:</p>
+<p>Results fill in across four tabs: <strong>Overview</strong>,
+<strong>Agent graph</strong>, <strong>Agent activity</strong> and
+<strong>Generated code</strong>. The last two are worth a look &mdash; they show
+what each agent said, and the Python it wrote and ran.</p>
+
+<h2>4. What you can ask about</h2>
+<p>The user id in this dataset is always <code>user1</code>, and the data runs
+from 2019 to 2022. <code>2020-11-02</code> is a well-populated day to start
+from. These databases are available:</p>
 <ul>
   <li><strong>sms</strong> &mdash; message metadata: direction, length, read status, contact</li>
   <li><strong>call log</strong> &mdash; incoming, outgoing and missed calls with durations</li>
   <li><strong>app usage</strong> &mdash; which app was in the foreground over time</li>
   <li><strong>lock unlock</strong> &mdash; when the phone was locked and unlocked</li>
-  <li><strong>sensing</strong> &mdash; daily aggregates: activity, audio, conversations, time at places</li>
+  <li><strong>sensing mobility</strong> &mdash; where they were and how they moved:
+      distance, places visited, time at home and other places, activity</li>
 </ul>
-<p>Data runs from 2019 to 2022. <code>2020-11-02</code> is a well-populated day
-to start from.</p>
+<p>You never say which database to use. Part of what GLOSS does is work that
+out &mdash; the <strong>Overview</strong> tab shows which one it chose.</p>
 
-<h2>4. Useful commands</h2>
-<pre>python -m agents.local_model     # check your connection to the language model
-python sensemaking_process.py    # run a query
-exit                             # log out</pre>
-
-<h2>5. Optional: use the graphical interface in your browser</h2>
-<p>GLOSS also has a dashboard that shows each stage of the pipeline as it runs.
-It runs on the server, so you reach it through your SSH connection rather than
-by opening a public address. It takes two steps.</p>
-
-<p><strong>Step 1.</strong> Log out if you are already connected, then reconnect
-using the <em>Browser UI login</em> command from your row in the table. It is the
-same login with a tunnel added:</p>
-<pre>ssh -p {port} -L 8501:127.0.0.1:&lt;your UI port&gt; p01@{host}</pre>
-
-<p><strong>Step 2.</strong> In that session, start the dashboard:</p>
-<pre>streamlit run sensemaking_ui.py</pre>
-
-<p>Then open this address in your own browser:</p>
-<pre>http://localhost:8501</pre>
-
-<p>Type your query in the box and press <strong>Start Sense-Making</strong>. The
-expanders fill in as each agent finishes. Leave the terminal window open while
-you use it &mdash; closing it stops the dashboard. Press <code>Ctrl-C</code> in the
-terminal when you are done.</p>
-
-<div class="note"><strong>Avoid the &ldquo;Open in New Tab&rdquo; buttons</strong> in the
-dashboard. They try to open a browser on the server rather than on your machine,
-so they do nothing useful here. Everything you need is on the main page.</div>
-
-<h2>6. If something goes wrong</h2>
+<h2>5. If something goes wrong</h2>
 <ul>
-  <li><strong>A run seems stuck.</strong> Press <code>Ctrl-C</code> and run it again.</li>
+  <li><strong>The browser will not load the page.</strong> Check the dashboard is
+      still running in your terminal window.</li>
+  <li><strong>ssh said <code>bind: Address already in use</code>.</strong> Something
+      on your own machine is using port 8501. Reconnect with
+      <code>-L 8601:127.0.0.1:&lt;your UI port&gt;</code> and open
+      <code>http://localhost:8601</code> instead.</li>
+  <li><strong>A run seems stuck.</strong> Press <strong>Stop</strong> in the sidebar
+      and run it again.</li>
   <li><strong>Errors mentioning the gateway.</strong> The shared language model is
       busy or unreachable &mdash; tell the organiser rather than retrying repeatedly.</li>
-  <li><strong>You broke your copy of the code.</strong> Ask the organiser; your
-      instance can be reset in seconds without affecting anyone else.</li>
+  <li><strong>Your connection dropped.</strong> Connect again and restart the
+      dashboard.</li>
   <li>Please do not run <code>docker</code> commands &mdash; you do not need them,
       and they affect the other participants.</li>
 </ul>
 
 <h2>Credentials</h2>
 <table>
-  <tr><th>You are</th><th>Password</th><th>Terminal login (section 1)</th><th>Browser UI login (section 5)</th></tr>
+  <tr><th>You are</th><th>Password</th><th>Your login command</th></tr>
 {table_rows}
 </table>
 

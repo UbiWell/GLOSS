@@ -16,6 +16,46 @@ The participant in the sample data is always **`user1`**, and the data spans
 
 ---
 
+# Getting in
+
+**The dashboard is the only way participants use GLOSS.** There is a command
+line underneath, but it is not part of the tutorial and is not worth showing:
+one way in means one set of instructions, and nobody lost between two.
+
+Each participant has their own number, UI port and password, all on their
+handout. Three steps:
+
+**1. Connect**, from their own machine:
+
+```
+ssh -p 65173 -L 8501:127.0.0.1:<THEIR-UI-PORT> p<NN>@<server>
+```
+
+The UI port is `8500 +` their number — p01 is 8501, p07 is 8507. Nothing
+appears while typing the password; that is normal. First connection asks them
+to accept the host key: `yes`.
+
+**2. Start the dashboard**, in that same session:
+
+```
+streamlit run sensemaking_ui.py
+```
+
+**3. Open <http://localhost:8501>** in their own browser.
+
+Then, in the left sidebar: type a **Question**, or click one of the examples;
+set **How should the answer be presented?**; press **Run**. Both boxes need
+content or Run stays greyed out.
+
+Leave the terminal window open — closing it stops the dashboard.
+
+> **If the browser will not load it:** check the dashboard is still running in
+> their terminal. If ssh printed `bind: Address already in use`, something on
+> their machine already has port 8501 — reconnect with
+> `-L 8601:127.0.0.1:<THEIR-UI-PORT>` and open `localhost:8601` instead.
+
+---
+
 # Demo 1 — Registering a database
 
 ## What this demonstrates
@@ -153,8 +193,7 @@ Three things were uncommented:
 
 **Restart the dashboard — `Ctrl-C`, then `streamlit run sensemaking_ui.py`.**
 A page reload is not enough: the registry is built once when the module is
-first imported. (From the command line there is nothing to restart; each run is
-a fresh process.)
+first imported.
 
 The sidebar now says `6 databases`, with no "not loaded yet".
 
