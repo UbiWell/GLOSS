@@ -144,9 +144,14 @@ QUERIES = [
     },
     # TUTORIAL.md demo 2 -- record before and after registering the helper.
     {
-        "label": "Texting conversations (demo 2)",
+        "label": "Texting exchanges (demo 2)",
         "demo": "helper",
-        "query": "How many separate texting conversations did user1 have on 2019-10-06?",
+        # "How many separate texting conversations" reads as "how many people
+        # did they text", and the agent answered it that way -- unique_contacts,
+        # 9, identically with and without the helper, so the demo showed
+        # nothing. Naming the gap makes grouping by time unavoidable.
+        "query": "On 2019-10-06, how many separate back-and-forth texting exchanges "
+                 "did user1 have, where a long gap with no messages starts a new one?",
         "instructions": CLEAR,
         "note": "Demo 2. Answer varies until get_sms_conversation_blocks is registered.",
     },

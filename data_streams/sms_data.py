@@ -91,7 +91,7 @@ functions = {
     # "SMS4": {
     #     "name": "get_sms_conversation_blocks",
     #     "usecase": ["function_calling", "code_generation"],
-    #     "description": "Groups text messages into conversations: runs of messages with the same contact where consecutive messages are no more than gap_minutes apart. Use this for any question about conversations, exchanges or back-and-forths, rather than grouping messages by hand -- the gap that separates two conversations is a judgement call, and this function fixes it so the same question always gives the same answer.",
+    #     "description": "Groups text messages into conversations: runs of messages with the same contact where consecutive messages are no more than gap_minutes apart. Use this for any question about conversations, exchanges, threads or back-and-forths. The answer is the number of conversations this returns, which is NOT the number of distinct contacts -- one contact can account for several conversations across a day, and get_sms_stats's unique_contacts answers a different question. The gap that separates two conversations is a judgement call, and this function fixes it so the same question always gives the same answer.",
     #     "params": {
     #         "uid": {"type": "str", "description": "The unique identifier for the user."},
     #         "start_time": {"type": "str", "description": "The start of the time range, in the format '%Y-%m-%d %H:%M:%S'."},

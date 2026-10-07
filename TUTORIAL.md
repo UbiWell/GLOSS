@@ -49,10 +49,17 @@ After: **3.0 hours**.
 
 **Query:**
 
-> How many separate texting conversations did user1 have on 2019-10-06?
+> On 2019-10-06, how many separate back-and-forth texting exchanges did user1
+> have, where a long gap with no messages starts a new one?
 
-Before: everyone gets a different number — the agent invents a gap threshold
-(33 at 5 minutes, 22 at 30, 14 at 120). After: **22**, for everyone.
+Before: the agent has to pick a gap and does so silently, so answers vary —
+33 at 5 minutes, 26 at 15, 22 at 30, 14 at 120. After: **22**, for everyone,
+because the helper fixes the gap at a documented 30 minutes.
+
+> Do not shorten this to "how many separate texting conversations". That reads
+> as "how many people did they text", and the agent answers it with
+> `unique_contacts` — 9, identically with and without the helper, so the demo
+> shows nothing.
 
 **Uncomment** two things: the `"SMS4"` entry in `data_streams/sms_data.py`
 (lines 91–103) and the matching line in `data_streams/sms_database.py`
