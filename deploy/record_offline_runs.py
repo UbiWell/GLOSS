@@ -45,10 +45,15 @@ replay prefers the recording matching the current state. So record these twice:
 once as shipped, then again after uncommenting the two demos -- and remember to
 put the files back afterwards.
 
-    <record>                                    # the shipped state
+    python deploy/record_offline_runs.py            # everything, shipped state
     # ... uncomment both demos, per TUTORIAL.md ...
-    <record>                                    # the registered state
-    git checkout data_streams/                  # back to the demo state
+    python deploy/record_offline_runs.py --demos    # the demo questions again
+    git checkout data_streams/                      # back to the demo state
+
+--demos re-records only the questions whose answers change once their demo has
+been performed, so the second pass is three runs rather than all ten. The rest
+do not depend on what is registered and keep working from their single
+recording.
 
 Uncomment in the instance you are recording from, since that is where the
 fingerprint is read.
@@ -89,7 +94,12 @@ QUERIES = [
     {
         "label": "Summarise a day",
         "query": "Summarize what user1's day looked like on 2021-07-17.",
-        "instructions": "focus on qualitative aspects",
+        # A form instruction, not a substance one. "Focus on qualitative
+        # aspects" was quietly ignored: the presentation agent is told not to
+        # do additional analysis, and by the time it runs the understanding is
+        # already a set of numbers. Presentation instructions shape how an
+        # answer is laid out, not what it is made of.
+        "instructions": "give it as bullet points",
     },
     # The dashboard's own starter examples.
     {
@@ -115,12 +125,14 @@ QUERIES = [
     # TUTORIAL.md demo 1 -- record before and after registering the database.
     {
         "label": "Sleep (demo 1)",
+        "demo": True,
         "query": "How many hours did user1 sleep on 2019-10-06?",
         "instructions": CLEAR,
         "note": "Demo 1. Fails before the sensing behaviour database is registered.",
     },
     {
         "label": "Conversations overheard (demo 1 alternative)",
+        "demo": True,
         "query": "How many conversations was user1 around on 2019-10-06?",
         "instructions": CLEAR,
         "note": "Demo 1 alternative, for when sleep gets inferred from lock/unlock.",
@@ -128,6 +140,7 @@ QUERIES = [
     # TUTORIAL.md demo 2 -- record before and after registering the helper.
     {
         "label": "Texting conversations (demo 2)",
+        "demo": True,
         "query": "How many separate texting conversations did user1 have on 2019-10-06?",
         "instructions": CLEAR,
         "note": "Demo 2. Answer varies until get_sms_conversation_blocks is registered.",
@@ -144,6 +157,32 @@ def existing_ids():
     }
 
 
+def prune():
+    """Delete recordings that no longer match anything in QUERIES.
+
+    Editing a question or its presentation instructions does not replace the
+    old recording: both are part of the cache key, so the previous one stays
+    on disk and the dashboard offers two rows with the same label and
+    different answers. Recordings of several registration states are kept --
+    that is deliberate, and replay picks between them.
+    """
+    current = {(q["query"].strip(), q.get("instructions", CLEAR).strip())
+               for q in QUERIES}
+    removed = 0
+    for recording in offline_runs.load_recordings():
+        key = (recording["query"].strip(), (recording.get("instructions") or "").strip())
+        if key in current:
+            continue
+        path = recording.get("_path")
+        print(f"removing: {recording.get('label') or recording['query'][:50]}")
+        print(f"          instructions: {recording.get('instructions') or '(none)'}")
+        os.remove(path)
+        removed += 1
+    print(f"\n==> {removed} stale recording(s) removed."
+          if removed else "==> Nothing stale; every recording matches a current question.")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--list", action="store_true",
@@ -152,6 +191,12 @@ def main():
                         help="re-record even where a recording exists for this state")
     parser.add_argument("--only", default=None,
                         help="only questions containing this text (case-insensitive)")
+    parser.add_argument("--demos", action="store_true",
+                        help="only the tutorial demo questions, whose answers change "
+                             "once their demo has been performed")
+    parser.add_argument("--prune", action="store_true",
+                        help="delete recordings of questions or instructions no "
+                             "longer in this file, then exit")
     args = parser.parse_args()
 
     fingerprint = offline_runs.state_fingerprint()
@@ -170,10 +215,15 @@ def main():
         print("\n* = recorded in this instance's current state")
         return 0
 
+    if args.prune:
+        return prune()
+
     wanted = QUERIES
+    if args.demos:
+        wanted = [q for q in QUERIES if q.get("demo")]
     if args.only:
         needle = args.only.lower()
-        wanted = [q for q in QUERIES
+        wanted = [q for q in wanted
                   if needle in q["query"].lower() or needle in q["label"].lower()]
         if not wanted:
             print(f"Nothing matches --only {args.only!r}")

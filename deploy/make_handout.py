@@ -17,11 +17,16 @@ import shutil
 import subprocess
 import sys
 
+# Any headless Chrome will do. Named several ways because the binary differs
+# by platform and packaging: Debian and Ubuntu ship chromium-browser, the snap
+# and newer debs ship chromium, and Google's own deb is google-chrome-stable.
 CHROME_CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
     "google-chrome",
+    "google-chrome-stable",
     "chromium",
+    "chromium-browser",
 ]
 
 CSS = """

@@ -248,7 +248,33 @@ class ReplayRun:
             self.answer = final.get("answer", self.answer)
             self.current_step = "FINISH"
 
+            # Same reason: the finished run should report how long it took,
+            # not how long the playback took. Set before finish(), which only
+            # fills finished_at when it is still unset.
+            original = (self.recording.get("summary") or {}).get("elapsed")
+            if original:
+                self.trace.finished_at = self.trace.started_at + float(original)
+
         self.trace.finish()
+
+    def _keep_recorded_elapsed(self, event):
+        """Restore the original run's timing on the event just added.
+
+        A replay has two clocks, and mixing them produced nonsense: stage
+        durations and the total came from the compressed replay, while the
+        per-call model latencies were the original run's. The overview read
+        "48s of the 25s was spent waiting on the language model (192%)".
+
+        The recorded timings are the real information -- how long the run
+        actually took, and where it went -- so they win. Compression decides
+        only when each event appears on screen.
+        """
+        recorded = event.get("elapsed")
+        if recorded is None:
+            return
+        with self.trace._lock:  # noqa: SLF001 - replaying into a trace
+            if self.trace._events:
+                self.trace._events[-1]["elapsed"] = recorded
 
     def _emit(self, event):
         """Put one recorded event on the live trace and update the fields."""
@@ -275,12 +301,14 @@ class ReplayRun:
 
             self.current_step = name
             self.trace.enter_stage(name)
+            self._keep_recorded_elapsed(event)
             return
 
         # Keep the stage recorded against each event, so the timeline groups
         # them the way the original run did.
         self.trace._stage = event.get("stage")  # noqa: SLF001 - replaying a record
         self.trace.add(kind, **payload)
+        self._keep_recorded_elapsed(event)
 
         if kind == run_trace.MEMORY:
             field, added = event.get("field"), event.get("added") or ""
